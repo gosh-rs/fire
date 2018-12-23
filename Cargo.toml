@@ -1,0 +1,15 @@
+# cargo
+
+# [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*cargo][cargo:1]]
+[package]
+name = "fire"
+version = "0.0.1"
+edition = "2018"
+authors = ["Wenping Guo <ybyygu@gmail.com>"]
+
+[dependencies]
+structopt = "0.2"
+quicli = "0.4"
+
+[dev-dependencies]
+# cargo:1 ends here
