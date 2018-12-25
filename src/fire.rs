@@ -1,6 +1,7 @@
 // base
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*base][base:1]]
+//! The Fast-Inertial-Relaxation-Engine (FIRE) algorithm
 #[derive(Debug, Clone)]
 pub struct FIRE {
     /// the maximum time step allowed
@@ -31,8 +32,11 @@ pub struct FIRE {
     /// adaptive parameter that controls the velocity used to evolve the system.
     alpha: f64,
 
-    /// current velocities
-    velocities: Option<Velocities>,
+    /// current velocity
+    velocity: Option<Velocity>,
+
+    /// displacement vector
+    displacement: Option<Displacement>,
 
     /// current number of iterations when go downhill
     nsteps: usize,
@@ -42,19 +46,20 @@ impl Default for FIRE {
     fn default() -> Self {
         FIRE {
             // default parameters taken from the original paper
-            dt_max     : 1.00,
-            alpha_start: 0.10,
-            f_alpha    : 0.99,
-            f_dec      : 0.50,
-            f_inc      : 1.10,
-            maxdisp    : 0.10,
-            nsteps_min : 5,
+            dt_max      : 1.00,
+            alpha_start : 0.10,
+            f_alpha     : 0.99,
+            f_dec       : 0.50,
+            f_inc       : 1.10,
+            maxdisp     : 0.10,
+            nsteps_min  : 5,
 
             // counters or adaptive parameters
-            dt         : 0.10,
-            alpha      : 0.10,
-            nsteps     : 0,
-            velocities : None,
+            dt           : 0.10,
+            alpha        : 0.10,
+            nsteps       : 0,
+            velocity     : None,
+            displacement : None,
         }
     }
 }
@@ -65,16 +70,17 @@ impl Default for FIRE {
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*core][core:1]]
 impl FIRE {
     /// Propagate the system for one simulation step using FIRE algorithm.
-    fn propagate(mut self, forces: &[f64]) -> Result<Displacement, String> {
+    pub fn propagate(mut self, force: &[f64]) {
         // F0. prepare data
-        let n = forces.len();
-        let mut velocities = self.velocities.unwrap_or(Velocities(vec![0.0; n]));
+        let n = force.len();
+        let mut velocity = self.velocity.unwrap_or(Velocity(vec![0.0; n]));
+        let mut displacement = self.displacement.unwrap_or(Displacement(vec![0.0; n]));
 
         // F1. calculate the power: P = F·V
-        let power = forces.vecdot(&velocities);
+        let power = force.vecdot(&velocity);
 
-        // F2. adjust velocities
-        velocities.adjust(forces, self.alpha);
+        // F2. adjust velocity
+        velocity.adjust(force, self.alpha);
 
         // F3 & F4: check the direction of power: go downhill or go uphill
         if power.is_sign_positive() {
@@ -94,29 +100,27 @@ impl FIRE {
             self.alpha = self.alpha_start;
             // reset step counter
             self.nsteps = 0;
-            // reset velocities to zero
-            velocities.reset();
+            // reset velocity to zero
+            velocity.reset();
         }
 
         // F5. calculate displacement vectors based on a typical MD stepping algorithm
-        // update the internal velocities
-        let mut disp = Displacement(vec![0.0; n]);
-        disp.take_md_step(forces, &velocities, self.dt);
-
+        // update the internal velocity
+        displacement.take_md_step(force, &velocity, self.dt);
         // scale the displacement according to max displacement
-        disp.rescale(self.maxdisp);
+        displacement.rescale(self.maxdisp);
 
         // save state
-        self.velocities = Some(velocities);
-
-        Ok(disp)
+        self.velocity = Some(velocity);
+        self.displacement = Some(displacement);
     }
 }
 // core:1 ends here
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*Displacement][Displacement:3]]
-use crate::math::*;
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*displacement][displacement:3]]
+use vecfx::*;
 
+/// Represents the displacement vector
 #[derive(Debug, Clone)]
 pub struct Displacement(Vec<f64>);
 
@@ -124,23 +128,26 @@ impl Displacement {
     /// Get particle displacement vectors by performing a regular MD step
     ///
     /// D = dt * V + 0.5 * F * dt^2
-    pub fn take_md_step(&mut self, forces: &[f64], velocities: &[f64], timestep: f64) {
-        let n = velocities.len();
-        debug_assert!(n == forces.len(), "input vectors are in different size!");
+    pub fn take_md_step(&mut self, force: &[f64], velocity: &[f64], timestep: f64) {
+        let n = velocity.len();
+        debug_assert!(
+            n == force.len(),
+            "the sizes of input vectors are different!"
+        );
 
         let dt = timestep;
 
         // Verlet algorithm
-        self.0 = velocities.to_vec();
+        self.0 = velocity.to_vec();
 
         // D = dt * V
         self.0.vecscale(dt);
 
         // D += 0.5 * dt^2 * F
-        self.0.vecadd(forces, 0.5 * dt.powi(2));
+        self.0.vecadd(force, 0.5 * dt.powi(2));
     }
 
-    // scale the displacement vectors if exceed a given max displacement.
+    /// Scale the displacement vector if its norm exceeds a given cutoff.
     pub fn rescale(&mut self, max_disp: f64) {
         // get the max norm of displacement vector for atoms
         let norm = self.0.vec2norm();
@@ -162,15 +169,16 @@ impl Deref for Displacement {
         &self.0
     }
 }
-// Displacement:3 ends here
+// displacement:3 ends here
 
-// Velocities
+// velocity
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*Velocities][Velocities:1]]
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*velocity][velocity:1]]
+/// Represents the velocity vector
 #[derive(Debug, Clone)]
-pub struct Velocities(Vec<f64>);
+pub struct Velocity(Vec<f64>);
 
-impl Deref for Velocities {
+impl Deref for Velocity {
     type Target = Vec<f64>;
 
     fn deref(&self) -> &Vec<f64> {
@@ -178,26 +186,26 @@ impl Deref for Velocities {
     }
 }
 
-impl Velocities {
-    // reset velocities to zero
+impl Velocity {
+    /// Reset velocity to zero
     pub fn reset(&mut self) {
         for i in 0..self.0.len() {
             self.0[i] = 0.0;
         }
     }
 
-    /// Update velocities
+    /// Update velocity
     ///
     /// V = (1 - alpha) · V + alpha · F / |F| · |V|
-    pub fn adjust(&mut self, forces: &[f64], alpha: f64) {
+    pub fn adjust(&mut self, force: &[f64], alpha: f64) {
         let vnorm = self.0.vec2norm();
-        let fnorm = forces.vec2norm();
+        let fnorm = force.vec2norm();
 
         // V = (1-alpha) · V
         self.0.vecscale(1.0 - alpha);
 
         // V += alpha · F / |F| · |V|
-        self.0.vecadd(forces, alpha * vnorm / fnorm);
+        self.0.vecadd(force, alpha * vnorm / fnorm);
     }
 }
-// Velocities:1 ends here
+// velocity:1 ends here

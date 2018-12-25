@@ -10,6 +10,10 @@ authors = ["Wenping Guo <ybyygu@gmail.com>"]
 [dependencies]
 structopt = "0.2"
 quicli = "0.4"
+vecfx = {git = "https://github.com/ybyygu/vecfx.git"}
 
 [dev-dependencies]
+
+[features]
+default = []
 # cargo:1 ends here

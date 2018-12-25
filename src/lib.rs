@@ -1,4 +1,4 @@
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*lib.rs][lib.rs:2]]
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*lib.rs][lib.rs:3]]
 //! Implementation of the Fast-Inertial-Relaxation-Engine (FIRE) algorithm
 //! 
 //! References
@@ -7,6 +7,5 @@
 //! * http://users.jyu.fi/~pekkosk/resources/pdf/FIRE.pdf
 //! * https://github.com/siesta-project/flos/blob/master/flos/optima/fire.lua
 
-mod math;
 mod fire;
-// lib.rs:2 ends here
+// lib.rs:3 ends here
