@@ -7,5 +7,6 @@
 //! * http://users.jyu.fi/~pekkosk/resources/pdf/FIRE.pdf
 //! * https://github.com/siesta-project/flos/blob/master/flos/optima/fire.lua
 
-mod fire;
+pub mod fire;
+pub mod lj;
 // lib.rs:3 ends here

@@ -14,6 +14,8 @@ pub struct FIRE {
     alpha_start: f64,
 
     /// the maximum displacement allowed
+    // the default value in ase in 0.2 (maxmove)
+    // 0.04 in pysisyphus
     maxdisp: f64,
 
     /// factor used to increase time-step if downhill
@@ -36,7 +38,7 @@ pub struct FIRE {
     velocity: Option<Velocity>,
 
     /// displacement vector
-    displacement: Option<Displacement>,
+    pub displacement: Option<Displacement>,
 
     /// current number of iterations when go downhill
     nsteps: usize,
@@ -51,7 +53,7 @@ impl Default for FIRE {
             f_alpha     : 0.99,
             f_dec       : 0.50,
             f_inc       : 1.10,
-            maxdisp     : 0.10,
+            maxdisp     : 0.15,
             nsteps_min  : 5,
 
             // counters or adaptive parameters
@@ -70,10 +72,11 @@ impl Default for FIRE {
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*core][core:1]]
 impl FIRE {
     /// Propagate the system for one simulation step using FIRE algorithm.
-    pub fn propagate(mut self, force: &[f64]) {
+    fn propagate(mut self, force: &[f64]) -> Self {
         // F0. prepare data
         let n = force.len();
         let mut velocity = self.velocity.unwrap_or(Velocity(vec![0.0; n]));
+        // caching displacement for memory performance
         let mut displacement = self.displacement.unwrap_or(Displacement(vec![0.0; n]));
 
         // F1. calculate the power: P = F·V
@@ -106,16 +109,131 @@ impl FIRE {
 
         // F5. calculate displacement vectors based on a typical MD stepping algorithm
         // update the internal velocity
+        velocity.update(force, self.dt);
+
+        // let mut displacement = Displacement(vec![0.0; n]);
         displacement.take_md_step(force, &velocity, self.dt);
+
         // scale the displacement according to max displacement
         displacement.rescale(self.maxdisp);
 
         // save state
         self.velocity = Some(velocity);
         self.displacement = Some(displacement);
+        self
     }
 }
 // core:1 ends here
+
+// entry
+
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*entry][entry:1]]
+impl FIRE {
+    pub fn minimize<E, S>(mut self, x: &mut [f64], mut f: E, mut stopping: S)
+    where
+        E: FnMut(&[f64], &mut [f64]) -> f64,
+        S: TerminationCriteria,
+    {
+        let n = x.len();
+        let mut forces = vec![0.0; n];
+
+        for i in 0.. {
+            let fx = f(x, &mut forces);
+
+            let progress = Progress {
+                niter: i,
+                gnorm: forces.vec2norm(),
+                fx,
+            };
+
+            if stopping.met(&progress) {
+                println!("normal termination!");
+                break;
+            }
+
+            self = self.propagate(&forces);
+            if let Some(ref displ) = self.displacement {
+                displ.apply(x);
+            } else {
+                panic!("bad");
+            }
+        }
+    }
+}
+// entry:1 ends here
+
+// stop
+
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*stop][stop:1]]
+/// Termination criteria
+#[derive(Debug, Clone)]
+pub struct Termination {
+    /// The maximum number of optimization cycles.
+    pub max_cycles: usize,
+    /// The max allowed gradient norm
+    pub max_gradient_norm: f64,
+}
+
+impl Default for Termination {
+    fn default() -> Self {
+        Termination {
+            max_cycles: 0,
+            max_gradient_norm: 0.2,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Progress {
+    pub fx: f64,
+    pub niter: usize,
+    pub gnorm: f64,
+}
+
+pub trait TerminationCriteria {
+    fn met(&mut self, progress: &Progress) -> bool;
+}
+
+impl TerminationCriteria for Termination {
+    fn met(&mut self, progress: &Progress) -> bool {
+        if self.max_cycles > 0 && progress.niter >= self.max_cycles {
+            return true;
+        }
+
+        if progress.gnorm <= self.max_gradient_norm {
+            return true;
+        }
+
+        false
+    }
+}
+
+/// For user defined termination criteria
+pub struct UserTermination<G>
+where
+    G: FnMut(&Progress) -> bool,
+{
+    cb: G,
+}
+
+impl<G> UserTermination<G>
+where
+    G: FnMut(&Progress) -> bool,
+{
+    pub fn new(cb: G) -> Self {
+        UserTermination { cb }
+    }
+}
+
+impl<G> TerminationCriteria for UserTermination<G>
+where
+    G: FnMut(&Progress) -> bool,
+{
+    fn met(&mut self, progress: &Progress) -> bool {
+        (self.cb)(progress)
+    }
+}
+// stop:1 ends here
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*displacement][displacement:3]]
 use vecfx::*;
@@ -158,6 +276,12 @@ impl Displacement {
             self.0.vecscale(s);
         }
     }
+
+    /// Apply displacement vector to `x`
+    /// x += d
+    pub fn apply(&self, x: &mut [f64]) {
+        x.vecadd(self, 1.0);
+    }
 }
 
 // Deref coercion: use Displacement as a normal vec
@@ -194,7 +318,7 @@ impl Velocity {
         }
     }
 
-    /// Update velocity
+    /// adjust velocity
     ///
     /// V = (1 - alpha) · V + alpha · F / |F| · |V|
     pub fn adjust(&mut self, force: &[f64], alpha: f64) {
@@ -206,6 +330,13 @@ impl Velocity {
 
         // V += alpha · F / |F| · |V|
         self.0.vecadd(force, alpha * vnorm / fnorm);
+    }
+
+    /// update velocity
+    ///
+    /// V += dt · F
+    pub fn update(&mut self, force: &[f64], dt: f64) {
+        self.0.vecadd(force, dt);
     }
 }
 // velocity:1 ends here

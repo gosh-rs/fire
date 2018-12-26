@@ -3,16 +3,18 @@
 # [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*cargo][cargo:1]]
 [package]
 name = "fire"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2018"
 authors = ["Wenping Guo <ybyygu@gmail.com>"]
 
 [dependencies]
-structopt = "0.2"
+#structopt = "0.2"
 quicli = "0.4"
-vecfx = {git = "https://github.com/ybyygu/vecfx.git"}
+#vecfx = {git = "https://github.com/ybyygu/vecfx.git"}
+vecfx = {path = "/home/ybyygu/Workspace/Programming/rust-libs/vecfx"}
 
 [dev-dependencies]
+#gchemol = {git = "https://github.com/ybyygu/gchemol.git"}
 
 [features]
 default = []
