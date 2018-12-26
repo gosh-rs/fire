@@ -1,46 +1,58 @@
-// base
+// header
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*base][base:1]]
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*header][header:1]]
 //! The Fast-Inertial-Relaxation-Engine (FIRE) algorithm
+// header:1 ends here
+
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*base][base:2]]
+/// The Fast-Inertial-Relaxation-Engine (FIRE) algorithm
+///
+/// # Notes from the paper
+/// 
+/// * `n_min` larger than 1 (at least a few smooth steps after freezing);
+/// * `f_inc` larger than but near to one (avoid too fast acceleration);
+/// * `f_dec` smaller than 1 but much larger than zero (avoid too heavy slowing down)
+/// * `alpha_start` larger than, but near to zero (avoid too heavy damping)
+/// * `f_alpha` smaller than, but near to one (mixing is efficient some time after restart).
 #[derive(Debug, Clone)]
 pub struct FIRE {
-    /// the maximum time step allowed
-    dt_max: f64,
+    /// Factor used to decrease alpha-parameter if downhill
+    pub f_alpha: f64,
 
-    /// factor used to decrease alpha-parameter if downhill
-    f_alpha: f64,
+    /// Initial alpha-parameter.
+    pub alpha_start: f64,
 
-    /// initial alpha-parameter
-    alpha_start: f64,
+    /// The maximum size for an optimization step. According to the paper, this
+    /// is the only parameter needs to be adjusted by the user.
+    pub max_step: f64,
 
-    /// the maximum displacement allowed
-    // the default value in ase in 0.2 (maxmove)
-    // 0.04 in pysisyphus
-    maxdisp: f64,
+    /// Factor used to increase time-step if downhill
+    pub f_inc: f64,
 
-    /// factor used to increase time-step if downhill
-    f_inc: f64,
+    /// Factor used to decrease time-step if uphill
+    pub f_dec: f64,
 
-    /// factor used to decrease time-step if uphill
-    f_dec: f64,
-
-    /// minimum number of iterations ("latency" time) performed before time-step
+    /// Minimum number of iterations ("latency" time) performed before time-step
     /// may be increased, which is important for the stability of the algorithm.
-    nsteps_min: usize,
+    pub n_min: usize,
 
     /// adaptive time step for integration of the equations of motion
     dt: f64,
 
-    /// adaptive parameter that controls the velocity used to evolve the system.
+    /// The maximum time step as in the paper. Do not change this, change
+    /// max_step instead.
+    dt_max: f64,
+
+    /// Adaptive parameter that controls the velocity used to evolve the system.
     alpha: f64,
 
-    /// current velocity
+    /// Current velocity
     velocity: Option<Velocity>,
 
-    /// displacement vector
+    /// Displacement vector
     pub displacement: Option<Displacement>,
 
-    /// current number of iterations when go downhill
+    /// Current number of iterations when go downhill
     nsteps: usize,
 }
 
@@ -48,24 +60,36 @@ impl Default for FIRE {
     fn default() -> Self {
         FIRE {
             // default parameters taken from the original paper
-            dt_max      : 1.00,
-            alpha_start : 0.10,
-            f_alpha     : 0.99,
-            f_dec       : 0.50,
-            f_inc       : 1.10,
-            maxdisp     : 0.15,
-            nsteps_min  : 5,
+            dt_max: 1.00,
+            alpha_start: 0.10,
+            f_alpha: 0.99,
+            f_dec: 0.50,
+            f_inc: 1.10,
+            // pele: 0.5, ase: 0.2
+            max_step: 0.10,
+            n_min: 5,
 
             // counters or adaptive parameters
-            dt           : 0.10,
-            alpha        : 0.10,
-            nsteps       : 0,
-            velocity     : None,
-            displacement : None,
+            dt: 0.10,
+            alpha: 0.10,
+            nsteps: 0,
+            velocity: None,
+            displacement: None,
         }
     }
 }
-// base:1 ends here
+// base:2 ends here
+
+// builder
+
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*builder][builder:1]]
+impl FIRE {
+    pub fn with_max_step(mut self, maxstep: f64) -> Self {
+        self.max_step = maxstep;
+        self
+    }
+}
+// builder:1 ends here
 
 // core
 
@@ -89,7 +113,7 @@ impl FIRE {
         if power.is_sign_positive() {
             // F3. when go downhill
             // increase time step if we have go downhill for enough times
-            if self.nsteps > self.nsteps_min {
+            if self.nsteps > self.n_min {
                 self.dt = self.dt_max.min(self.dt * self.f_inc);
                 self.alpha *= self.f_alpha;
             }
@@ -115,7 +139,7 @@ impl FIRE {
         displacement.take_md_step(force, &velocity, self.dt);
 
         // scale the displacement according to max displacement
-        displacement.rescale(self.maxdisp);
+        displacement.rescale(self.max_step);
 
         // save state
         self.velocity = Some(velocity);
