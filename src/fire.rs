@@ -3,7 +3,9 @@
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*header][header:1]]
 //! The Fast-Inertial-Relaxation-Engine (FIRE) algorithm
 ///
-/// This method is stable with respect to random errors in the potential energy.
+/// This method is stable with respect to random errors in the potential energy
+/// and force. FIRE has strict adherence to minimizing forces, which makes
+/// constrained minimization easy.
 // header:1 ends here
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*base][base:2]]
@@ -141,7 +143,7 @@ impl FIRE {
         // let mut displacement = Displacement(vec![0.0; n]);
         displacement.take_md_step(force, &velocity, self.dt);
 
-        // scale the displacement according to max displacement
+        // scale the displacement according to max step
         displacement.rescale(self.max_step);
 
         // save state
