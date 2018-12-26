@@ -2,6 +2,8 @@
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*header][header:1]]
 //! The Fast-Inertial-Relaxation-Engine (FIRE) algorithm
+///
+/// This method is stable with respect to random errors in the potential energy.
 // header:1 ends here
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*base][base:2]]
@@ -16,15 +18,15 @@
 /// * `f_alpha` smaller than, but near to one (mixing is efficient some time after restart).
 #[derive(Debug, Clone)]
 pub struct FIRE {
+    /// The maximum size for an optimization step. According to the paper, this
+    /// is the only parameter needs to be adjusted by the user.
+    pub max_step: f64,
+
     /// Factor used to decrease alpha-parameter if downhill
     pub f_alpha: f64,
 
     /// Initial alpha-parameter.
     pub alpha_start: f64,
-
-    /// The maximum size for an optimization step. According to the paper, this
-    /// is the only parameter needs to be adjusted by the user.
-    pub max_step: f64,
 
     /// Factor used to increase time-step if downhill
     pub f_inc: f64,
@@ -84,6 +86,7 @@ impl Default for FIRE {
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*builder][builder:1]]
 impl FIRE {
+    /// Sets the maximum size for an optimization step.
     pub fn with_max_step(mut self, maxstep: f64) -> Self {
         self.max_step = maxstep;
         self
