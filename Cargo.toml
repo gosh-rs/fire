@@ -8,10 +8,8 @@ edition = "2018"
 authors = ["Wenping Guo <ybyygu@gmail.com>"]
 
 [dependencies]
-#structopt = "0.2"
 quicli = "0.4"
-#vecfx = {git = "https://github.com/ybyygu/vecfx.git"}
-vecfx = {path = "/home/ybyygu/Workspace/Programming/rust-libs/vecfx"}
+vecfx = {git = "https://github.com/ybyygu/vecfx.git"}
 
 [dev-dependencies]
 #gchemol = {git = "https://github.com/ybyygu/gchemol.git"}
