@@ -208,32 +208,74 @@ impl GradientBasedMinimizer for FIRE {
         G: TerminationCriteria,
     {
         let n = x.len();
-        let mut forces = vec![0.0; n];
+        let mut gx = vec![0.0; n];
+        let mut pgx = vec![0.0; n];
 
+        let mut ncall = 0;
         for i in 0.. {
-            let fx = f(x, &mut forces);
-            forces.vecscale(-1.0);
+            ncall += 1;
+            // cache gradient of previous step
+            pgx.veccpy(&gx);
+            let fx = f(x, &mut gx);
 
-            let progress = Progress {
-                niter: i,
-                gnorm: forces.vec2norm(),
-                fx,
-            };
+            // to force
+            gx.vecscale(-1.0);
 
-            if let Some(ref mut stopping) = stopping {
-                if stopping.met(&progress) {
+            self = self.propagate(&gx);
+            if let Some(ref displ) = self.displacement {
+                // to gradient
+                gx.vecscale(-1.0);
+                // line search
+                // if i > 1 {
+                //     let v1 = displ.vecdot(&gx).abs();
+                //     let v2 = displ.vecdot(&pgx).abs();
+                //     if v1/v2 > 0.9 {
+                //         println!("The Curvature Condition is not satisfied.");
+                //         let mut d = displ.to_vec();
+                //         for i in 0..10 {
+                //             d.vecscale(0.5);
+                //             x.vecadd(&d, 1.0);
+                //             // pgx.veccpy(&gx);
+                //             let fx = f(x, &mut gx);
+                //             let v1 = d.vecdot(&gx).abs();
+                //             // let v2 = d.vecdot(&pgx).abs();
+                //             println!("iter {} {:#?}", i, v1/v2);
+                //             if v1/v2 < 0.9 {
+                //                 break;
+                //             }
+                //             ncall += i;
+                //         }
+                //     }
+                // } else {
+                //     displ.apply(x);
+                // }
+
+                // if i > 500 {
+                //     break;
+                // }
+
+                displ.apply(x);
+
+                let progress = Progress {
+                    niter: i,
+                    ncall: ncall,
+                    gx: &gx,
+                    gnorm: gx.vec2norm(),
+                    displacement: displ,
+                    x,
+                    fx,
+                };
+
+                if let Some(ref mut stopping) = stopping {
+                    if stopping.met(&progress) {
+                        break;
+                    }
+                }
+
+                if self.termination.met(&progress) {
+                    println!("normal termination!");
                     break;
                 }
-            }
-
-            if self.termination.met(&progress) {
-                println!("normal termination!");
-                break;
-            }
-
-            self = self.propagate(&forces);
-            if let Some(ref displ) = self.displacement {
-                displ.apply(x);
             } else {
                 panic!("bad");
             }

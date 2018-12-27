@@ -10,6 +10,12 @@
 //! * https://github.com/siesta-project/flos/blob/master/flos/optima/fire.lua
 
 mod fire;
+mod line;
+
+pub mod common {
+    pub use quicli::prelude::*;
+    pub type Result<T> = ::std::result::Result<T, Error>;
+}
 
 /// Create FIRE optimization interface
 pub fn fire() -> fire::FIRE {
@@ -17,7 +23,7 @@ pub fn fire() -> fire::FIRE {
 }
 
 /// Create user defined monitor or termination criteria with a closure
-pub fn monitor<G>(mut cb: G) -> Option<UserTermination<G>>
+pub fn monitor<G>(cb: G) -> Option<UserTermination<G>>
 where
     G: FnMut(&Progress) -> bool,
 {
@@ -30,12 +36,57 @@ pub use crate::fire::FIRE;
 // progress
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*progress][progress:1]]
-/// Holds important progress data per iteration in minimization.
+/// Important iteration data in minimization, useful for progress monitor or
+/// defining artificial termination criteria.
+#[repr(C)]
 #[derive(Debug, Clone)]
-pub struct Progress {
-    pub fx: f64,
-    pub niter: usize,
-    pub gnorm: f64,
+pub struct Progress<'a> {
+    /// Cached value of gradient vector norm.
+    gnorm: f64,
+
+    /// The number of iteration in optimization loop.
+    niter: usize,
+
+    /// The actual number of function value/gradient calls. This number can be
+    /// larger than `niter`.
+    ncall: usize,
+
+    /// displacement vector over input variables vector
+    displacement: &'a [f64],
+
+    /// Reference to current input variables vector
+    x: &'a [f64],
+
+    /// Reference to current gradient vector of f(x): 'f(x)
+    gx: &'a [f64],
+
+    /// The current value of the objective function.
+    fx: f64,
+}
+
+impl<'a> Progress<'a> {
+    /// Return a reference to gradient vector.
+    pub fn gradient(&self) -> &'a [f64] {
+        self.gx
+    }
+
+    /// Return current function value.
+    pub fn value(&self) -> f64 {
+        self.fx
+    }
+
+    /// Return a reference to displacement vector.
+    pub fn displacement(&self) -> &'a [f64] {
+        self.displacement
+    }
+
+    /// Print a summary about progress.
+    pub fn report(&self) {
+        println!(
+            "niter = {:5}, ncall= {:5}: fx = {:-10.4}, gnorm = {:-10.4}",
+            self.niter, self.ncall, self.fx, self.gnorm
+        );
+    }
 }
 // progress:1 ends here
 
@@ -75,7 +126,7 @@ impl Default for Termination {
     fn default() -> Self {
         Termination {
             max_cycles: 0,
-            max_gradient_norm: 0.1,
+            max_gradient_norm: 0.01,
         }
     }
 }

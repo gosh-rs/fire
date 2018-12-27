@@ -36,10 +36,8 @@ fn test() {
     };
 
     let m = monitor(|prgr| {
-        println!(
-            "niter = {:5}: fx = {:-10.4}, gnorm = {:-10.4}",
-            prgr.niter, prgr.fx, prgr.gnorm
-        );
+        prgr.report();
+
         false
     });
 
