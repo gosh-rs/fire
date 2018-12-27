@@ -6,6 +6,12 @@
 /// This method is stable with respect to random errors in the potential energy
 /// and force. FIRE has strict adherence to minimizing forces, which makes
 /// constrained minimization easy.
+
+use crate::Progress;
+use crate::Termination;
+use crate::UserTermination;
+use crate::TerminationCriteria;
+use crate::GradientBasedMinimizer;
 // header:1 ends here
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*base][base:2]]
@@ -22,22 +28,34 @@
 pub struct FIRE {
     /// The maximum size for an optimization step. According to the paper, this
     /// is the only parameter needs to be adjusted by the user.
+    ///
+    /// The default value is 0.10.
     pub max_step: f64,
 
     /// Factor used to decrease alpha-parameter if downhill
+    ///
+    /// The default value is 0.99.
     pub f_alpha: f64,
 
     /// Initial alpha-parameter.
+    ///
+    /// The default value is 0.1.
     pub alpha_start: f64,
 
     /// Factor used to increase time-step if downhill
+    ///
+    /// The default value is 1.1.
     pub f_inc: f64,
 
     /// Factor used to decrease time-step if uphill
+    ///
+    /// The default value is 0.5.
     pub f_dec: f64,
 
     /// Minimum number of iterations ("latency" time) performed before time-step
     /// may be increased, which is important for the stability of the algorithm.
+    ///
+    /// The default value is 5.
     pub n_min: usize,
 
     /// adaptive time step for integration of the equations of motion
@@ -54,10 +72,13 @@ pub struct FIRE {
     velocity: Option<Velocity>,
 
     /// Displacement vector
-    pub displacement: Option<Displacement>,
+    displacement: Option<Displacement>,
 
     /// Current number of iterations when go downhill
     nsteps: usize,
+
+    /// Default termination criteria
+    termination: Termination,
 }
 
 impl Default for FIRE {
@@ -79,6 +100,9 @@ impl Default for FIRE {
             nsteps: 0,
             velocity: None,
             displacement: None,
+
+            // others
+            termination: Termination::default(),
         }
     }
 }
@@ -90,7 +114,26 @@ impl Default for FIRE {
 impl FIRE {
     /// Sets the maximum size for an optimization step.
     pub fn with_max_step(mut self, maxstep: f64) -> Self {
+        assert!(
+            maxstep.is_sign_positive(),
+            "step size should be a positive number!"
+        );
+
         self.max_step = maxstep;
+        self
+    }
+
+    /// Set the maximum cycles for termination.
+    pub fn with_max_cycles(mut self, n: usize) -> Self {
+        self.termination.max_cycles = n;
+        self
+    }
+
+    /// Set the maximum gradient/force norm for termination.
+    pub fn with_max_gradient_norm(mut self, gmax: f64) -> Self {
+        assert!(gmax.is_sign_positive(), "gmax: bad parameter!");
+        self.termination.max_gradient_norm = gmax;
+
         self
     }
 }
@@ -157,17 +200,19 @@ impl FIRE {
 // entry
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*entry][entry:1]]
-impl FIRE {
-    pub fn minimize<E, S>(mut self, x: &mut [f64], mut f: E, mut stopping: S)
+impl GradientBasedMinimizer for FIRE {
+    /// minimize with user defined termination criteria / monitor
+    fn minimize_alt<E, G>(mut self, x: &mut [f64], mut f: E, mut stopping: Option<G>)
     where
         E: FnMut(&[f64], &mut [f64]) -> f64,
-        S: TerminationCriteria,
+        G: TerminationCriteria,
     {
         let n = x.len();
         let mut forces = vec![0.0; n];
 
         for i in 0.. {
             let fx = f(x, &mut forces);
+            forces.vecscale(-1.0);
 
             let progress = Progress {
                 niter: i,
@@ -175,7 +220,13 @@ impl FIRE {
                 fx,
             };
 
-            if stopping.met(&progress) {
+            if let Some(ref mut stopping) = stopping {
+                if stopping.met(&progress) {
+                    break;
+                }
+            }
+
+            if self.termination.met(&progress) {
                 println!("normal termination!");
                 break;
             }
@@ -190,79 +241,6 @@ impl FIRE {
     }
 }
 // entry:1 ends here
-
-// stop
-
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*stop][stop:1]]
-/// Termination criteria
-#[derive(Debug, Clone)]
-pub struct Termination {
-    /// The maximum number of optimization cycles.
-    pub max_cycles: usize,
-    /// The max allowed gradient norm
-    pub max_gradient_norm: f64,
-}
-
-impl Default for Termination {
-    fn default() -> Self {
-        Termination {
-            max_cycles: 0,
-            max_gradient_norm: 0.2,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Progress {
-    pub fx: f64,
-    pub niter: usize,
-    pub gnorm: f64,
-}
-
-pub trait TerminationCriteria {
-    fn met(&mut self, progress: &Progress) -> bool;
-}
-
-impl TerminationCriteria for Termination {
-    fn met(&mut self, progress: &Progress) -> bool {
-        if self.max_cycles > 0 && progress.niter >= self.max_cycles {
-            return true;
-        }
-
-        if progress.gnorm <= self.max_gradient_norm {
-            return true;
-        }
-
-        false
-    }
-}
-
-/// For user defined termination criteria
-pub struct UserTermination<G>
-where
-    G: FnMut(&Progress) -> bool,
-{
-    cb: G,
-}
-
-impl<G> UserTermination<G>
-where
-    G: FnMut(&Progress) -> bool,
-{
-    pub fn new(cb: G) -> Self {
-        UserTermination { cb }
-    }
-}
-
-impl<G> TerminationCriteria for UserTermination<G>
-where
-    G: FnMut(&Progress) -> bool,
-{
-    fn met(&mut self, progress: &Progress) -> bool {
-        (self.cb)(progress)
-    }
-}
-// stop:1 ends here
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*displacement][displacement:3]]
 use vecfx::*;
