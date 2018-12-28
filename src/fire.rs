@@ -222,9 +222,10 @@ impl GradientBasedMinimizer for FIRE {
         pgx.veccpy(&gx);
         let mut fx = f(x, &mut gx);
 
-        // let mut ls = Backtracking::default();
-        let mut ls = MoreThuente::default();
-        ls.max_iterations = 5;
+        let ls = linesearch()
+            .with_max_iterations(5)
+            .with_algorithm("MoreThuente");
+
         let mut ncall = 1;
         for i in 1.. {
             // cache gradient of previous step
@@ -253,12 +254,12 @@ impl GradientBasedMinimizer for FIRE {
                         // update data
                         *dg = d.vecdot(&gx);
                         fx = r;
+                        step = stp;
 
                         r
                     }
                 };
-
-                let _ = ls.find(&mut step, phi).expect("ls");
+                let _ = ls.find(phi).expect("ls");
 
                 // save previous position
                 xp.veccpy(&x);

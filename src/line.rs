@@ -1,8 +1,179 @@
 // header
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*header][header:1]]
+/// ported from lbfgs crate
 use crate::common::*;
 // header:1 ends here
+
+// pub
+
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*pub][pub:1]]
+/// A unified interface to line search mod
+///
+/// # Examples
+///
+/// ```ignore
+/// use line::linesearch;
+/// 
+/// let mut step = 1.0;
+/// let count = linesearch()
+///     .with_max_iterations(5) // the default is 10
+///     .with_initial_step(1.5) // the default is 1.0
+///     .with_algorithm("BackTracking") // the default is MoreThuente
+///     .find(|a: f64, dphi: &mut f64| {
+///         // restore position
+///         x.veccpy(xp);
+///         // update position with step along d
+///         x.vecadd(&d, a);
+///         // update value and gradient
+///         let phi_a = f(x, &mut gx)?;
+///         // update line search gradient
+///         *dphi = gx.vecdot(d);
+///         // update optimal step size
+///         step = a;
+///         // return line search value
+///         phi_a
+///     });
+///```
+pub fn linesearch() -> LineSearch {
+    LineSearch::default()
+}
+
+pub struct LineSearch {
+    max_iterations: usize,
+    algorithm: LineSearchAlgorithm,
+    initial_step: f64,
+}
+
+impl Default for LineSearch {
+    fn default() -> Self {
+        LineSearch {
+            max_iterations: 10,
+            algorithm: LineSearchAlgorithm::default(),
+            initial_step: 1.0,
+        }
+    }
+}
+
+impl LineSearch {
+    /// Set max number of iterations in line search.
+    pub fn with_max_iterations(mut self, n: usize) -> Self {
+        self.max_iterations = n;
+        self
+    }
+
+    pub fn with_initial_step(mut self, stp: f64) -> Self {
+        assert!(
+            stp.is_sign_positive(),
+            "line search initial step should be a positive float!"
+        );
+
+        self.initial_step = stp;
+        self
+    }
+
+    /// Set line search algorithm.
+    pub fn with_algorithm(mut self, s: &str) -> Self {
+        self.algorithm = match s {
+            "MoreThuente" => LineSearchAlgorithm::MoreThuente,
+            "BackTracking" | "BackTrackingWolfe" => LineSearchAlgorithm::BackTrackingWolfe,
+            "BackTrackingStrongWolfe" => LineSearchAlgorithm::BackTrackingWolfe,
+            "BackTrackingArmijo" => LineSearchAlgorithm::BackTrackingArmijo,
+            _ => unimplemented!(),
+        };
+
+        self
+    }
+
+    /// Perform line search.
+    pub fn find<E>(&self, f: E) -> Result<usize>
+    where
+        E: FnMut(f64, &mut f64) -> f64,
+    {
+        use self::LineSearchAlgorithm as lsa;
+
+        let mut ls = BackTracking::default();
+        ls.max_iterations = self.max_iterations;
+        let mut step = self.initial_step;
+        match self.algorithm {
+            lsa::MoreThuente => {
+                let mut ls = MoreThuente::default();
+                ls.max_iterations = self.max_iterations;
+                ls.find(&mut step, f)
+            }
+            lsa::BackTrackingWolfe => {
+                ls.condition = LineSearchCondition::Wolfe;
+                ls.find(&mut step, f)
+            }
+            lsa::BackTrackingStrongWolfe => {
+                ls.condition = LineSearchCondition::StrongWolfe;
+                ls.find(&mut step, f)
+            }
+            lsa::BackTrackingArmijo => {
+                ls.condition = LineSearchCondition::Armijo;
+                ls.find(&mut step, f)
+            }
+            _ => unimplemented!(),
+        }
+    }
+}
+// pub:1 ends here
+
+// algorithm
+
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*algorithm][algorithm:1]]
+/// Line search algorithms.
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum LineSearchAlgorithm {
+    /// MoreThuente method proposd by More and Thuente. This is the default for
+    /// regular LBFGS.
+    MoreThuente,
+
+    ///
+    /// BackTracking method with the Armijo condition.
+    ///
+    /// The backtracking method finds the step length such that it satisfies
+    /// the sufficient decrease (Armijo) condition,
+    ///   - f(x + a * d) <= f(x) + ftol * a * g(x)^T d,
+    ///
+    /// where x is the current point, d is the current search direction, and
+    /// a is the step length.
+    ///
+    BackTrackingArmijo,
+
+    /// BackTracking method with strong Wolfe condition.
+    ///
+    /// The backtracking method finds the step length such that it satisfies
+    /// both the Armijo condition (BacktrackingArmijo)
+    /// and the following condition,
+    ///   - |g(x + a * d)^T d| <= gtol * |g(x)^T d|,
+    ///
+    /// where x is the current point, d is the current search direction, and
+    /// a is the step length.
+    ///
+    BackTrackingStrongWolfe,
+
+    ///
+    /// BackTracking method with regular Wolfe condition.
+    ///
+    /// The backtracking method finds the step length such that it satisfies
+    /// both the Armijo condition (BacktrackingArmijo)
+    /// and the curvature condition,
+    ///   - g(x + a * d)^T d >= gtol * g(x)^T d,
+    ///
+    /// where x is the current point, d is the current search direction, and a
+    /// is the step length.
+    ///
+    BackTrackingWolfe,
+}
+
+impl Default for LineSearchAlgorithm {
+    /// The default algorithm (MoreThuente method).
+    fn default() -> Self {
+        LineSearchAlgorithm::MoreThuente
+    }
+}
+// algorithm:1 ends here
 
 // base
 
@@ -15,12 +186,16 @@ pub enum LineSearchCondition {
     StrongWolfe,
 }
 
-pub trait LineSearch<E>
+pub trait LineSearchFind<E>
 where
     E: FnMut(f64, &mut f64) -> f64,
 {
     /// Given initial step size and phi function, returns an satisfactory step
     /// size.
+    ///
+    /// `step` is a positive scalar representing the step size along search
+    /// direction. phi is an univariable function of `step` for evaluating the
+    /// value and the gradient projected onto search direction.
     fn find(&mut self, step: &mut f64, phi: E) -> Result<usize>;
 }
 // base:1 ends here
@@ -29,7 +204,7 @@ where
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*BackTracking][BackTracking:1]]
 #[derive(Clone, Debug)]
-pub struct Backtracking {
+struct BackTracking {
     /// A parameter to control the accuracy of the line search routine.
     ///
     /// The default value is 1e-4. This parameter should be greater
@@ -52,7 +227,7 @@ pub struct Backtracking {
     /// per iteration for the line search routine. The default value is 40. Set
     /// this value to 0, will completely disable line search.
     ///
-    pub max_iterations: usize,
+    max_iterations: usize,
 
     /// The factor to increase step size
     fdec: f64,
@@ -80,9 +255,9 @@ pub struct Backtracking {
     condition: LineSearchCondition,
 }
 
-impl Default for Backtracking {
+impl Default for BackTracking {
     fn default() -> Self {
-        Backtracking {
+        BackTracking {
             ftol: 1e-4,
             gtol: 0.9,
             fdec: 0.5,
@@ -97,7 +272,7 @@ impl Default for Backtracking {
     }
 }
 
-impl<E> LineSearch<E> for Backtracking
+impl<E> LineSearchFind<E> for BackTracking
 where
     E: FnMut(f64, &mut f64) -> f64,
 {
@@ -286,10 +461,10 @@ where
 
 // Original documentation by J. Nocera (lbfgs.f):1 ends here
 
-// new
+// entry
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*new][new:1]]
-pub use self::mcsrch::MoreThuente;
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*entry][entry:1]]
+use self::mcsrch::MoreThuente;
 
 /// The purpose of mcsrch is to find a step which satisfies a sufficient
 /// decrease condition and a curvature condition.
@@ -366,7 +541,7 @@ mod mcsrch {
         }
     }
 
-    impl<E> LineSearch<E> for MoreThuente
+    impl<E> LineSearchFind<E> for MoreThuente
     where
         E: FnMut(f64, &mut f64) -> f64,
     {
@@ -385,7 +560,7 @@ mod mcsrch {
         /// 
         /// # Example
         /// 
-        /// - TODO
+        /// * TODO
         fn find(&mut self, stp: &mut f64, mut phi: E) -> Result<usize> {
             let mut dginit = 0.0;
             let mut dg = 0.0;
@@ -557,7 +732,7 @@ satisfies the sufficient decrease and curvature conditions."
         }
     }
 }
-// new:1 ends here
+// entry:1 ends here
 
 // mcstep
 

@@ -11,6 +11,7 @@
 
 mod fire;
 mod line;
+pub mod lj;
 
 pub mod common {
     pub use quicli::prelude::*;
