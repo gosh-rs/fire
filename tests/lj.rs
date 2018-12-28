@@ -6,10 +6,8 @@
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*lj.rs][lj.rs:1]]
 #[test]
 fn test_fire_opt() {
-    use fire::fire;
-    use fire::GradientBasedMinimizer;
+    use fire::*;
     use fire::lj::LennardJones;
-    use fire::monitor;
     use vecfx::*;
 
     // LJ38

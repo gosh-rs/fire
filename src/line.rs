@@ -1,14 +1,60 @@
 // header
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*header][header:1]]
-/// ported from lbfgs crate
+//! Line search, also called one-dimensional search, refers to an optimization
+//! procedure for univariable functions.
+//! 
+//! # Available algorithms
+//! 
+//! * MoreThuente
+//! * BackTracking
+//! * BackTrackingArmijo
+//! * BackTrackingWolfe
+//! * BackTrackingStrongWolfe
+//! 
+//! # References
+//! 
+//! * Sun, W.; Yuan, Y. Optimization Theory and Methods: Nonlinear Programming, 1st
+//!   ed.; Springer, 2006.
+//! * Nocedal, J.; Wright, S. Numerical Optimization; Springer Science & Business
+//!   Media, 2006.
+//! 
+//! 
+//! 
+//!
+//! # Examples
+//!
+//! ```ignore
+//! use line::linesearch;
+//! 
+//! let mut step = 1.0;
+//! let count = linesearch()
+//!     .with_max_iterations(5) // the default is 10
+//!     .with_initial_step(1.5) // the default is 1.0
+//!     .with_algorithm("BackTracking") // the default is MoreThuente
+//!     .find(|a: f64| {
+//!         // restore position
+//!         x.veccpy(&x_k);
+//!         // update position with step along d
+//!         x.vecadd(&d_k, a);
+//!         // update value and gradient
+//!         let phi_a = f(x, &mut gx)?;
+//!         // update line search gradient
+//!         let dphi = gx.vecdot(d);
+//!         // update optimal step size
+//!         step = a;
+//!         // return the value and the gradient in tuple
+//!         (phi_a, dphi)
+//!     })?;
+//!```
+
 use crate::common::*;
 // header:1 ends here
 
 // pub
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*pub][pub:1]]
-/// A unified interface to line search mod
+/// A unified interface to line search methods.
 ///
 /// # Examples
 ///
@@ -20,20 +66,20 @@ use crate::common::*;
 ///     .with_max_iterations(5) // the default is 10
 ///     .with_initial_step(1.5) // the default is 1.0
 ///     .with_algorithm("BackTracking") // the default is MoreThuente
-///     .find(|a: f64, dphi: &mut f64| {
+///     .find(|a: f64| {
 ///         // restore position
-///         x.veccpy(xp);
+///         x.veccpy(&x_k);
 ///         // update position with step along d
-///         x.vecadd(&d, a);
+///         x.vecadd(&d_k, a);
 ///         // update value and gradient
 ///         let phi_a = f(x, &mut gx)?;
 ///         // update line search gradient
-///         *dphi = gx.vecdot(d);
+///         let dphi = gx.vecdot(d);
 ///         // update optimal step size
 ///         step = a;
-///         // return line search value
-///         phi_a
-///     });
+///         // return the value and the gradient in tuple
+///         (phi_a, dphi)
+///     })?;
 ///```
 pub fn linesearch() -> LineSearch {
     LineSearch::default()
@@ -56,12 +102,13 @@ impl Default for LineSearch {
 }
 
 impl LineSearch {
-    /// Set max number of iterations in line search.
+    /// Set max number of iterations in line search. The default is 10.
     pub fn with_max_iterations(mut self, n: usize) -> Self {
         self.max_iterations = n;
         self
     }
 
+    /// Set initial step size when performing line search. The default is 1.0.
     pub fn with_initial_step(mut self, stp: f64) -> Self {
         assert!(
             stp.is_sign_positive(),
@@ -72,7 +119,7 @@ impl LineSearch {
         self
     }
 
-    /// Set line search algorithm.
+    /// Set line search algorithm. The default is MoreThuente algorithm.
     pub fn with_algorithm(mut self, s: &str) -> Self {
         self.algorithm = match s {
             "MoreThuente" => LineSearchAlgorithm::MoreThuente,
@@ -85,10 +132,17 @@ impl LineSearch {
         self
     }
 
-    /// Perform line search.
-    pub fn find<E>(&self, f: E) -> Result<usize>
+    /// Perform line search with a callback function `phi` to evaluate function
+    /// value and gradient projected onto search direction for a given step size
+    /// `step`.
+    ///
+    /// # Return
+    ///
+    /// If succeeds, return the number of function calls involved in line search.
+    ///
+    pub fn find<E>(&self, phi: E) -> Result<usize>
     where
-        E: FnMut(f64, &mut f64) -> f64,
+        E: FnMut(f64) -> (f64, f64),
     {
         use self::LineSearchAlgorithm as lsa;
 
@@ -99,19 +153,19 @@ impl LineSearch {
             lsa::MoreThuente => {
                 let mut ls = MoreThuente::default();
                 ls.max_iterations = self.max_iterations;
-                ls.find(&mut step, f)
+                ls.find(&mut step, phi)
             }
             lsa::BackTrackingWolfe => {
                 ls.condition = LineSearchCondition::Wolfe;
-                ls.find(&mut step, f)
+                ls.find(&mut step, phi)
             }
             lsa::BackTrackingStrongWolfe => {
                 ls.condition = LineSearchCondition::StrongWolfe;
-                ls.find(&mut step, f)
+                ls.find(&mut step, phi)
             }
             lsa::BackTrackingArmijo => {
                 ls.condition = LineSearchCondition::Armijo;
-                ls.find(&mut step, f)
+                ls.find(&mut step, phi)
             }
             _ => unimplemented!(),
         }
@@ -188,7 +242,7 @@ pub enum LineSearchCondition {
 
 pub trait LineSearchFind<E>
 where
-    E: FnMut(f64, &mut f64) -> f64,
+    E: FnMut(f64) -> (f64, f64),
 {
     /// Given initial step size and phi function, returns an satisfactory step
     /// size.
@@ -274,7 +328,7 @@ impl Default for BackTracking {
 
 impl<E> LineSearchFind<E> for BackTracking
 where
-    E: FnMut(f64, &mut f64) -> f64,
+    E: FnMut(f64) -> (f64, f64),
 {
     /// # Return
     ///
@@ -288,14 +342,12 @@ where
     fn find(&mut self, stp: &mut f64, mut phi: E) -> Result<usize> {
         use self::LineSearchCondition::*;
 
-        let mut dginit = 0.0;
-        let phi0 = phi(0.0, &mut dginit);
+        let (phi0, dginit) = phi(0.0);
         let dgtest = self.ftol * dginit;
 
-        let mut dg = 0.0;
         for k in 0..self.max_iterations {
             // Evaluate the function and gradient values along search direction.
-            let phi_k = phi(*stp, &mut dg);
+            let (phi_k, dg) = phi(*stp);
 
             let width = if phi_k > phi0 + *stp * dgtest {
                 self.fdec
@@ -543,28 +595,22 @@ mod mcsrch {
 
     impl<E> LineSearchFind<E> for MoreThuente
     where
-        E: FnMut(f64, &mut f64) -> f64,
+        E: FnMut(f64) -> (f64, f64),
     {
-        /// Find a step which satisfies a sufficient decrease condition and a
-        /// curvature condition (strong wolfe conditions).
+        /// Find a step which satisfies a sufficient decrease condition and a curvature
+        /// condition (strong wolfe conditions).
         /// 
         /// # Arguments
         /// 
         /// * stp: a nonnegative variable. on input stp contains an initial estimate of a
         ///   satisfactory step. on output stp contains the final estimate.
-        /// * direction: is an input array of length n which specifies the search direction.
+        /// * phi: a callback function to evaluate value and gradient along search direction.
         /// 
         /// # Return
         /// 
         /// * the number of function calls
-        /// 
-        /// # Example
-        /// 
-        /// * TODO
         fn find(&mut self, stp: &mut f64, mut phi: E) -> Result<usize> {
-            let mut dginit = 0.0;
-            let mut dg = 0.0;
-            let finit = phi(0.0, &mut dginit);
+            let (finit, dginit) = phi(0.0);
 
             let mut brackt = false;
             let mut stage1 = 1;
@@ -621,7 +667,7 @@ mod mcsrch {
 
                 // Compute the current value of x: x <- x + (*stp) * d.
                 // Evaluate the function and gradient values.
-                let f = phi(*stp, &mut dg);
+                let (f, dg) = phi(*stp);
                 let ftest1 = finit + *stp * dgtest;
 
                 // Test for errors and convergence.

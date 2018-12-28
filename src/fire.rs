@@ -240,23 +240,21 @@ impl GradientBasedMinimizer for FIRE {
                 // perform line search
                 let mut dg = 0.0;
                 let mut step = 1.0;
-                let phi = |stp: f64, dg: &mut f64| {
+                let phi = |stp: f64| {
                     // current point or trial point
                     if stp == 0.0 {
-                        *dg = d.vecdot(&gx);
-                        fx
+                        (fx, d.vecdot(&gx))
                     } else {
                         // restore position
                         x.veccpy(&xp);
                         x.vecadd(&d, stp);
                         let r = f(x, &mut gx);
-                        ncall += 1;
                         // update data
-                        *dg = d.vecdot(&gx);
+                        ncall += 1;
                         fx = r;
                         step = stp;
 
-                        r
+                        (r, d.vecdot(&gx))
                     }
                 };
                 let _ = ls.find(phi).expect("ls");

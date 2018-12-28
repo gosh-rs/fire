@@ -1,0 +1,151 @@
+# Created 2018-12-28 Fri 18:10
+#+TITLE: Line Search
+#+AUTHOR: Wenping Guo
+* 基本原理
+线搜索是在搜索方向确定的前提下, 将梯度向量 $g_k$ 投影到搜索方向 $d_k$ 上, 进行一
+维搜索, 用于确定合理的步长 $\alpha_k$.
+
+位置坐标迭代公式:
+
+\[
+x_{k+1}=x_{k}+\alpha_{k}d_{k}
+\]
+
+其中 $d_k$ 为搜索方向矢量(search direction).
+
+定义如下一维函数:
+
+\[
+\phi\left(\alpha\right)=f\left(x_{k}+\alpha d_{k}\right),\;\alpha>0
+\]
+
+对应的:
+
+$\phi\left(0\right)=f\left(x_{k}\right)$, $\phi\left(1\right)=f\left(x_{k}+d_{k}\right)$
+
+将function gradient $g_k$ 投影到搜索方向矢量 $d_k$ 上, 即得到线搜索的梯度, 其它为标量.
+
+\[
+\phi^{\prime}\left(0\right)=g_{k}^{T}d_{k}
+\]
+
+\[
+\phi^{\prime}\left(\alpha\right)=g_{k+1}^{T}d_{k}
+\]
+
+使用二分法, 黄金分割法, 可以确定较为精确的step size, 但计算量较大, 通常也没有必
+要. 在实际计算中, 应用的较多是近似搜索(inexact line search, approximate line
+search). line search要控制步长别太大, 同时也不能太小. 一维搜索应返回较优的
+$\alpha$, 使得 $\phi$ 和 $\phi^{\prime}$ 满足线搜索收敛性条件, 比如Wolfe
+condition等.
+
+- 条件1: The Sufficient Decrease Condition, 也称为Armijo condition 确保能量降低
+  足够大.
+
+\[
+\text{f\ensuremath{\left(x_{k}+\alpha_{k}d_{k}\right)}\ensuremath{\leq f\left(x_{k}\right)+c_{1}\alpha_{k}g_{k}^{T}d_{k}}}
+\]
+
+或写为:
+
+\[
+\phi\left(\alpha\right)\leq\phi\left(0\right)+c_{1}\alpha\phi^{\prime}\left(0\right)
+\]
+
+- 条件2: The Curvature Condition, 确保斜率变化足够大.
+
+\[
+g_{k+1}^{T}d_{k}\ge c_{2}g_{k}^{T}d_{k}
+\]
+
+也可写为:
+
+\[
+\phi^{\prime}\left(\alpha\right)\geq c_{2}\phi^{\prime}\left(0\right)
+\]
+
+- 条件3: strong wolfe condition on curvature
+
+\[
+\left|g_{k+1}^{T}d_{k}\right|\le c_{2}\left|g_{k}^{T}d_{k}\right|
+\]
+
+或:
+
+\[
+\left|\phi^{\prime}\left(\alpha\right)\right|\leq c_{2}\left|\phi^{\prime}\left(0\right)\right|
+\]
+
+满足条件1和条件2, 称为 Wolfe conditions; 满足条件1和条件3, 称为Strong Wolfe
+conditions.
+
+其中参数要求:
+
+\[
+0\leq c_{1}\leq c_{2}<1
+\]
+
+wikipedia中提及, 通常情况下, c1 = 0.1, c2 = 0.4
+
+几种重要的线搜索算法:
+- Backtracking: 进退法, 最简单. 仅需要函数值.
+- MoreThuente算法, 需要计算梯度, 满足strong wolfe conditions @More1994ATMST 原
+  LBFGS使用的就是这个算法. 以二次和三次插值为基础.
+- HagerZhang @Hager2006ATMST
+
+* 调用接口
+使用builder自定义搜索参数, 使用find函数来优化步长. find函数需要定义回调函数, 用
+于计算单变量函数 $\phi$ 的函数值 $\phi(\alpha)$ 及梯度 $\phi^\prime(\alpha)$ .
+
+#+NAME: linesearch-mod-doc
+#+BEGIN_SRC markdown :tangle no
+  Line search, also called one-dimensional search, refers to an optimization
+  procedure for univariable functions.
+  
+  # Available algorithms
+  
+  ,* MoreThuente
+  ,* BackTracking
+  ,* BackTrackingArmijo
+  ,* BackTrackingWolfe
+  ,* BackTrackingStrongWolfe
+  
+  # References
+  
+  ,* Sun, W.; Yuan, Y. Optimization Theory and Methods: Nonlinear Programming, 1st
+    ed.; Springer, 2006.
+  ,* Nocedal, J.; Wright, S. Numerical Optimization; Springer Science & Business
+    Media, 2006.
+#+END_SRC
+
+#+NAME: linesearch-example
+#+BEGIN_SRC rust :tangle no
+  use line::linesearch;
+  
+  let mut step = 1.0;
+  let count = linesearch()
+      .with_max_iterations(5) // the default is 10
+      .with_initial_step(1.5) // the default is 1.0
+      .with_algorithm("BackTracking") // the default is MoreThuente
+      .find(|a: f64| {
+          // restore position
+          x.veccpy(&x_k);
+          // update position with step along d
+          x.vecadd(&d_k, a);
+          // update value and gradient
+          let phi_a = f(x, &mut gx)?;
+          // update line search gradient
+          let dphi = gx.vecdot(d);
+          // update optimal step size
+          step = a;
+          // return the value and the gradient in tuple
+          (phi_a, dphi)
+      })?;
+#+END_SRC
+* References
+- [[https://en.wikipedia.org/wiki/Line_search][Line search - Wikipedia]]
+- [[https://en.wikipedia.org/wiki/Wolfe_conditions][Wolfe conditions - Wikipedia]]
+- [[https://en.wikipedia.org/wiki/Backtracking_line_search][Backtracking line search - Wikipedia]]
+- [[https://github.com/BRML/climin/blob/master/climin/linesearch.py][climin/linesearch.py at master · BRML/climin]]
+- [[https://github.com/eljost/pysisyphus/blob/dev/pysisyphus/optimizers/BacktrackingOptimizer.py][pysisyphus/BacktrackingOptimizer.py at dev · eljost/pysisyphus]]
+- [[https://github.com/JuliaNLSolvers/LineSearches.jl][JuliaNLSolvers/LineSearches.jl: Line search methods for optimization and root-finding]]

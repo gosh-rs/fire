@@ -9,11 +9,10 @@
 //! * http://users.jyu.fi/~pekkosk/resources/pdf/FIRE.pdf
 //! * https://github.com/siesta-project/flos/blob/master/flos/optima/fire.lua
 
-mod fire;
-mod line;
+pub mod line;
 pub mod lj;
 
-pub mod common {
+pub(crate) mod common {
     pub use quicli::prelude::*;
     pub type Result<T> = ::std::result::Result<T, Error>;
 }
@@ -31,6 +30,7 @@ where
     Some(UserTermination(cb))
 }
 
+mod fire;
 pub use crate::fire::FIRE;
 // base:1 ends here
 
