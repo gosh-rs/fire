@@ -200,6 +200,8 @@ impl FIRE {
 // entry
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*entry][entry:1]]
+use crate::line::*;
+
 impl GradientBasedMinimizer for FIRE {
     /// minimize with user defined termination criteria / monitor
     fn minimize_alt<E, G>(mut self, x: &mut [f64], mut f: E, mut stopping: Option<G>)
@@ -209,61 +211,67 @@ impl GradientBasedMinimizer for FIRE {
     {
         let n = x.len();
         let mut gx = vec![0.0; n];
+        // old g
         let mut pgx = vec![0.0; n];
 
-        let mut ncall = 0;
-        for i in 0.. {
-            ncall += 1;
-            // cache gradient of previous step
-            pgx.veccpy(&gx);
-            let fx = f(x, &mut gx);
+        // old x
+        let mut xp = vec![0.0; n];
+        xp.veccpy(&x);
 
+        // evaluate first
+        pgx.veccpy(&gx);
+        let mut fx = f(x, &mut gx);
+
+        // let mut ls = Backtracking::default();
+        let mut ls = MoreThuente::default();
+        ls.max_iterations = 5;
+        let mut ncall = 1;
+        for i in 1.. {
+            // cache gradient of previous step
             // to force
             gx.vecscale(-1.0);
 
             self = self.propagate(&gx);
-            if let Some(ref displ) = self.displacement {
+            if let Some(ref d) = self.displacement {
                 // to gradient
                 gx.vecscale(-1.0);
-                // line search
-                // if i > 1 {
-                //     let v1 = displ.vecdot(&gx).abs();
-                //     let v2 = displ.vecdot(&pgx).abs();
-                //     if v1/v2 > 0.9 {
-                //         println!("The Curvature Condition is not satisfied.");
-                //         let mut d = displ.to_vec();
-                //         for i in 0..10 {
-                //             d.vecscale(0.5);
-                //             x.vecadd(&d, 1.0);
-                //             // pgx.veccpy(&gx);
-                //             let fx = f(x, &mut gx);
-                //             let v1 = d.vecdot(&gx).abs();
-                //             // let v2 = d.vecdot(&pgx).abs();
-                //             println!("iter {} {:#?}", i, v1/v2);
-                //             if v1/v2 < 0.9 {
-                //                 break;
-                //             }
-                //             ncall += i;
-                //         }
-                //     }
-                // } else {
-                //     displ.apply(x);
-                // }
 
-                // if i > 500 {
-                //     break;
-                // }
+                // perform line search
+                let mut dg = 0.0;
+                let mut step = 1.0;
+                let phi = |stp: f64, dg: &mut f64| {
+                    // current point or trial point
+                    if stp == 0.0 {
+                        *dg = d.vecdot(&gx);
+                        fx
+                    } else {
+                        // restore position
+                        x.veccpy(&xp);
+                        x.vecadd(&d, stp);
+                        let r = f(x, &mut gx);
+                        ncall += 1;
+                        // update data
+                        *dg = d.vecdot(&gx);
+                        fx = r;
 
-                displ.apply(x);
+                        r
+                    }
+                };
+
+                let _ = ls.find(&mut step, phi).expect("ls");
+
+                // save previous position
+                xp.veccpy(&x);
 
                 let progress = Progress {
                     niter: i,
-                    ncall: ncall,
                     gx: &gx,
                     gnorm: gx.vec2norm(),
-                    displacement: displ,
+                    displacement: d,
                     x,
                     fx,
+                    step,
+                    ncall,
                 };
 
                 if let Some(ref mut stopping) = stopping {

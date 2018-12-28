@@ -42,8 +42,8 @@ fn test() {
     });
 
     fire()
-        .with_max_step(0.20)
-        .with_max_cycles(500)
+        .with_max_step(0.50)
+        .with_max_cycles(5000)
         .minimize_alt(&mut x, evaluate, m);
 }
 // rosenbrock:1 ends here

@@ -51,6 +51,9 @@ pub struct Progress<'a> {
     /// larger than `niter`.
     ncall: usize,
 
+    /// The line-search step used for this iteration.
+    pub step: f64,
+
     /// displacement vector over input variables vector
     displacement: &'a [f64],
 
@@ -83,8 +86,8 @@ impl<'a> Progress<'a> {
     /// Print a summary about progress.
     pub fn report(&self) {
         println!(
-            "niter = {:5}, ncall= {:5}: fx = {:-10.4}, gnorm = {:-10.4}",
-            self.niter, self.ncall, self.fx, self.gnorm
+            "niter = {:5}, ncall= {:5}: fx = {:-10.4}, gnorm = {:-10.4}, step = {:-10.4}",
+            self.niter, self.ncall, self.fx, self.gnorm, self.step,
         );
     }
 }
