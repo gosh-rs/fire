@@ -1,4 +1,4 @@
-# Created 2018-12-28 Fri 18:10
+# Created 2018-12-28 Fri 18:12
 #+TITLE: Line Search
 #+AUTHOR: Wenping Guo
 * 基本原理

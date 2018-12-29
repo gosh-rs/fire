@@ -18,9 +18,6 @@
 //!   ed.; Springer, 2006.
 //! * Nocedal, J.; Wright, S. Numerical Optimization; Springer Science & Business
 //!   Media, 2006.
-//! 
-//! 
-//! 
 //!
 //! # Examples
 //!
@@ -673,6 +670,7 @@ mod mcsrch {
                 // Test for errors and convergence.
                 if brackt && (*stp <= stmin || stmax <= *stp || uinfo != 0i32) {
                     // Rounding errors prevent further progress.
+                    // FIXME
                     bail!(
                         "A rounding error occurred; alternatively, no line-search step
 satisfies the sufficient decrease and curvature conditions."

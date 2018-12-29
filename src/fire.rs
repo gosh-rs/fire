@@ -144,7 +144,7 @@ impl FIRE {
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*core][core:1]]
 impl FIRE {
     /// Propagate the system for one simulation step using FIRE algorithm.
-    fn propagate(mut self, force: &[f64]) -> Self {
+    fn propagate(mut self, force: &[f64], force_prev: &[f64], first_time: bool) -> Self {
         // F0. prepare data
         let n = force.len();
         let mut velocity = self.velocity.unwrap_or(Velocity(vec![0.0; n]));
@@ -181,10 +181,16 @@ impl FIRE {
 
         // F5. calculate displacement vectors based on a typical MD stepping algorithm
         // update the internal velocity
-        velocity.update(force, self.dt);
+        if first_time {
+            velocity.update(force, self.dt);
+        } else {
+            velocity.update(force, self.dt);
+            // velocity.update_vv(force, force_prev, self.dt);
+        }
 
         // let mut displacement = Displacement(vec![0.0; n]);
-        displacement.take_md_step(force, &velocity, self.dt);
+        // displacement.take_md_step_vv(force, &velocity, self.dt);
+        displacement.take_md_step_se(&velocity, self.dt);
 
         // scale the displacement according to max step
         displacement.rescale(self.max_step);
@@ -224,7 +230,8 @@ impl GradientBasedMinimizer for FIRE {
 
         let ls = linesearch()
             .with_max_iterations(5)
-            .with_algorithm("MoreThuente");
+            //.with_algorithm("MoreThuente");
+            .with_algorithm("BackTracking");
 
         let mut ncall = 1;
         for i in 1.. {
@@ -232,7 +239,7 @@ impl GradientBasedMinimizer for FIRE {
             // to force
             gx.vecscale(-1.0);
 
-            self = self.propagate(&gx);
+            self = self.propagate(&gx, &pgx, i == 1);
             if let Some(ref d) = self.displacement {
                 // to gradient
                 gx.vecscale(-1.0);
@@ -301,8 +308,10 @@ pub struct Displacement(Vec<f64>);
 impl Displacement {
     /// Get particle displacement vectors by performing a regular MD step
     ///
+    /// Here we use Velocity Verlet (VV) integration formula.
+    ///
     /// D = dt * V + 0.5 * F * dt^2
-    pub fn take_md_step(&mut self, force: &[f64], velocity: &[f64], timestep: f64) {
+    pub fn take_md_step_vv(&mut self, force: &[f64], velocity: &[f64], timestep: f64) {
         let n = velocity.len();
         debug_assert!(
             n == force.len(),
@@ -319,6 +328,14 @@ impl Displacement {
 
         // D += 0.5 * dt^2 * F
         self.0.vecadd(force, 0.5 * dt.powi(2));
+    }
+
+    /// Semi-implicit Euler (SE)
+    ///
+    /// D = dt * V
+    pub fn take_md_step_se(&mut self, velocity: &[f64], timestep: f64) {
+        self.0 = velocity.to_vec();
+        self.0.vecscale(timestep);
     }
 
     /// Scale the displacement vector if its norm exceeds a given cutoff.
@@ -374,9 +391,9 @@ impl Velocity {
         }
     }
 
-    /// adjust velocity
-    ///
+    /// Adjust velocity
     /// V = (1 - alpha) · V + alpha · F / |F| · |V|
+    ///
     pub fn adjust(&mut self, force: &[f64], alpha: f64) {
         let vnorm = self.0.vec2norm();
         let fnorm = force.vec2norm();
@@ -388,11 +405,17 @@ impl Velocity {
         self.0.vecadd(force, alpha * vnorm / fnorm);
     }
 
-    /// update velocity
-    ///
     /// V += dt · F
     pub fn update(&mut self, force: &[f64], dt: f64) {
         self.0.vecadd(force, dt);
+    }
+
+    /// Update velocity using Velocity Verlet (VV) formulation.
+    ///
+    /// V += 0.5 · dt · (F_this + F_prev)
+    pub fn update_vv(&mut self, force_prev: &[f64], force_this: &[f64], dt: f64) {
+        self.0.vecadd(force_prev, 0.5*dt);
+        self.0.vecadd(force_this, 0.5*dt);
     }
 }
 // velocity:1 ends here
