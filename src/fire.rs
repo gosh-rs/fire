@@ -14,6 +14,24 @@ use crate::TerminationCriteria;
 use crate::GradientBasedMinimizer;
 // header:1 ends here
 
+// scheme
+
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*scheme][scheme:1]]
+/// MD Integration formulations for position update and velocity update
+#[derive(Clone, Copy, Debug)]
+pub enum MdScheme {
+    ForwardEuler,
+    VelocityVerlet,
+    SemiImplicitEuler,
+}
+
+impl Default for MdScheme {
+    fn default() -> Self {
+        MdScheme::VelocityVerlet
+    }
+}
+// scheme:1 ends here
+
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*base][base:2]]
 /// The Fast-Inertial-Relaxation-Engine (FIRE) algorithm
 ///
@@ -79,6 +97,9 @@ pub struct FIRE {
 
     /// Default termination criteria
     termination: Termination,
+
+    /// MD scheme
+    scheme: MdScheme,
 }
 
 impl Default for FIRE {
@@ -103,6 +124,7 @@ impl Default for FIRE {
 
             // others
             termination: Termination::default(),
+            scheme: MdScheme::default(),
         }
     }
 }
@@ -112,7 +134,7 @@ impl Default for FIRE {
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*builder][builder:1]]
 impl FIRE {
-    /// Sets the maximum size for an optimization step.
+    /// Set the maximum size for an optimization step.
     pub fn with_max_step(mut self, maxstep: f64) -> Self {
         assert!(
             maxstep.is_sign_positive(),
@@ -120,6 +142,17 @@ impl FIRE {
         );
 
         self.max_step = maxstep;
+        self
+    }
+
+    /// Set MD scheme for position and velocity update
+    pub fn with_md_scheme(mut self, scheme: &str) -> Self {
+        match scheme {
+            "SE" => self.scheme = MdScheme::SemiImplicitEuler,
+            "VV" => self.scheme = MdScheme::VelocityVerlet,
+            "FE" => self.scheme = MdScheme::ForwardEuler,
+            _ => unimplemented!(),
+        }
         self
     }
 
@@ -144,7 +177,7 @@ impl FIRE {
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*core][core:1]]
 impl FIRE {
     /// Propagate the system for one simulation step using FIRE algorithm.
-    fn propagate(mut self, force: &[f64], force_prev: &[f64], first_time: bool) -> Self {
+    fn propagate(mut self, force_prev: &[f64], force: &[f64]) -> Self {
         // F0. prepare data
         let n = force.len();
         let mut velocity = self.velocity.unwrap_or(Velocity(vec![0.0; n]));
@@ -181,16 +214,8 @@ impl FIRE {
 
         // F5. calculate displacement vectors based on a typical MD stepping algorithm
         // update the internal velocity
-        if first_time {
-            velocity.update(force, self.dt);
-        } else {
-            velocity.update(force, self.dt);
-            // velocity.update_vv(force, force_prev, self.dt);
-        }
-
-        // let mut displacement = Displacement(vec![0.0; n]);
-        // displacement.take_md_step_vv(force, &velocity, self.dt);
-        displacement.take_md_step_se(&velocity, self.dt);
+        displacement.take_md_step(&force_prev, &velocity, self.dt, self.scheme);
+        velocity.take_md_step(&force_prev, &force, self.dt, self.scheme);
 
         // scale the displacement according to max step
         displacement.rescale(self.max_step);
@@ -216,34 +241,36 @@ impl GradientBasedMinimizer for FIRE {
         G: TerminationCriteria,
     {
         let n = x.len();
-        let mut gx = vec![0.0; n];
-        // old g
-        let mut pgx = vec![0.0; n];
+        let mut x_prev = x.to_vec();
 
-        // old x
-        let mut xp = vec![0.0; n];
-        xp.veccpy(&x);
+        let mut gx = vec![0.0; n];
+        let mut gx_prev = gx.clone();
 
         // evaluate first
-        pgx.veccpy(&gx);
         let mut fx = f(x, &mut gx);
+        let mut fx_prev = fx;
 
         let ls = linesearch()
-            .with_max_iterations(5)
-            //.with_algorithm("MoreThuente");
+            .with_max_iterations(20)
             .with_algorithm("BackTracking");
+            // .with_algorithm("MoreThuente");
 
         let mut ncall = 1;
         for i in 1.. {
             // cache gradient of previous step
             // to force
             gx.vecscale(-1.0);
+            self = self.propagate(&gx_prev, &gx);
 
-            self = self.propagate(&gx, &pgx, i == 1);
+            // save previous point
+            gx_prev.veccpy(&gx);
+            x_prev.veccpy(&x);
+            fx_prev = fx;
+
+            // determine optimal step size along displacement
             if let Some(ref d) = self.displacement {
                 // to gradient
                 gx.vecscale(-1.0);
-
                 // perform line search
                 let mut dg = 0.0;
                 let mut step = 1.0;
@@ -253,8 +280,9 @@ impl GradientBasedMinimizer for FIRE {
                         (fx, d.vecdot(&gx))
                     } else {
                         // restore position
-                        x.veccpy(&xp);
+                        x.veccpy(&x_prev);
                         x.vecadd(&d, stp);
+                        // update value and gradient
                         let r = f(x, &mut gx);
                         // update data
                         ncall += 1;
@@ -265,9 +293,6 @@ impl GradientBasedMinimizer for FIRE {
                     }
                 };
                 let _ = ls.find(phi).expect("ls");
-
-                // save previous position
-                xp.veccpy(&x);
 
                 let progress = Progress {
                     niter: i,
@@ -306,36 +331,41 @@ use vecfx::*;
 pub struct Displacement(Vec<f64>);
 
 impl Displacement {
-    /// Get particle displacement vectors by performing a regular MD step
+    /// Update particle displacement vector by performing a regular MD step
     ///
-    /// Here we use Velocity Verlet (VV) integration formula.
+    /// Displacement = X(n+1) - X(n)
     ///
-    /// D = dt * V + 0.5 * F * dt^2
-    pub fn take_md_step_vv(&mut self, force: &[f64], velocity: &[f64], timestep: f64) {
-        let n = velocity.len();
+    pub fn take_md_step(
+        &mut self,
+        force: &[f64],    // F(n)
+        velocity: &[f64], // V(n)
+        timestep: f64,    // Δt
+        scheme: MdScheme,
+    ) {
         debug_assert!(
-            n == force.len(),
+            velocity.len() == force.len()
             "the sizes of input vectors are different!"
         );
 
         let dt = timestep;
-
-        // Verlet algorithm
         self.0 = velocity.to_vec();
-
-        // D = dt * V
-        self.0.vecscale(dt);
-
-        // D += 0.5 * dt^2 * F
-        self.0.vecadd(force, 0.5 * dt.powi(2));
-    }
-
-    /// Semi-implicit Euler (SE)
-    ///
-    /// D = dt * V
-    pub fn take_md_step_se(&mut self, velocity: &[f64], timestep: f64) {
-        self.0 = velocity.to_vec();
-        self.0.vecscale(timestep);
+        match scheme {
+            // Velocity Verlet (VV) integration formula.
+            //
+            // X(n+1) - X(n) = dt * V(n) + 0.5 * F(n) * dt^2
+            MdScheme::VelocityVerlet => {
+                // D = dt * V
+                self.0.vecscale(dt);
+                // D += 0.5 * dt^2 * F
+                self.0.vecadd(force, 0.5 * dt.powi(2));
+            }
+            // Semi-implicit Euler (SE) or Forward Euler (FE)
+            //
+            // D = dt * V
+            MdScheme::SemiImplicitEuler | MdScheme::ForwardEuler => {
+                self.0.vecscale(timestep);
+            }
+        }
     }
 
     /// Scale the displacement vector if its norm exceeds a given cutoff.
@@ -405,17 +435,32 @@ impl Velocity {
         self.0.vecadd(force, alpha * vnorm / fnorm);
     }
 
-    /// V += dt · F
-    pub fn update(&mut self, force: &[f64], dt: f64) {
-        self.0.vecadd(force, dt);
-    }
-
     /// Update velocity using Velocity Verlet (VV) formulation.
-    ///
-    /// V += 0.5 · dt · (F_this + F_prev)
-    pub fn update_vv(&mut self, force_prev: &[f64], force_this: &[f64], dt: f64) {
-        self.0.vecadd(force_prev, 0.5*dt);
-        self.0.vecadd(force_this, 0.5*dt);
+    /// V(n+1) += dt· F(n)
+    pub fn take_md_step(
+        &mut self,
+        force_this: &[f64], // F(n)
+        force_next: &[f64], // F(n+1)
+        dt: f64,            // Δt
+        scheme: MdScheme,
+    ) {
+        match scheme {
+            // Update velocity using Velocity Verlet (VV) formulation.
+            //
+            // V(n+1) = V(n) + 0.5 · dt · [F(n) + F(n+1)]
+            MdScheme::VelocityVerlet => {
+                self.0.vecadd(force_this, 0.5 * dt);
+                self.0.vecadd(force_next, 0.5 * dt);
+            }
+            // V(n+1) = V(n) + dt· F(n+1)
+            MdScheme::SemiImplicitEuler => {
+                self.0.vecadd(force_next, dt);
+            }
+            // V(n+1) = V(n) + dt· F(n)
+            MdScheme::ForwardEuler => {
+                self.0.vecadd(force_this, dt);
+            }
+        }
     }
 }
 // velocity:1 ends here
