@@ -12,6 +12,7 @@ use crate::Termination;
 use crate::UserTermination;
 use crate::TerminationCriteria;
 use crate::GradientBasedMinimizer;
+use crate::common::*;
 // header:1 ends here
 
 // scheme
@@ -28,6 +29,8 @@ pub enum MdScheme {
 impl Default for MdScheme {
     fn default() -> Self {
         MdScheme::VelocityVerlet
+        // MdScheme::SemiImplicitEuler
+        // MdScheme::ForwardEuler
     }
 }
 // scheme:1 ends here
@@ -100,6 +103,9 @@ pub struct FIRE {
 
     /// MD scheme
     scheme: MdScheme,
+
+    /// line search algorithm
+    linesearch: Option<LineSearchAlgorithm>,
 }
 
 impl Default for FIRE {
@@ -125,6 +131,7 @@ impl Default for FIRE {
             // others
             termination: Termination::default(),
             scheme: MdScheme::default(),
+            linesearch: None,
         }
     }
 }
@@ -169,6 +176,13 @@ impl FIRE {
 
         self
     }
+
+    /// Enable line search of optimal step size using algorithm `alg`.
+    ///
+    /// The default is no line search.
+    pub fn with_line_search(mut self, alg: &str) -> Self {
+        unimplemented!()
+    }
 }
 // builder:1 ends here
 
@@ -187,11 +201,11 @@ impl FIRE {
         // F1. calculate the power: P = F·V
         let power = force.vecdot(&velocity);
 
-        // F2. adjust velocity
-        velocity.adjust(force, self.alpha);
-
         // F3 & F4: check the direction of power: go downhill or go uphill
         if power.is_sign_positive() {
+            // F2. adjust velocity
+            velocity.adjust(force, self.alpha);
+
             // F3. when go downhill
             // increase time step if we have go downhill for enough times
             if self.nsteps > self.n_min {
@@ -214,8 +228,8 @@ impl FIRE {
 
         // F5. calculate displacement vectors based on a typical MD stepping algorithm
         // update the internal velocity
-        displacement.take_md_step(&force_prev, &velocity, self.dt, self.scheme);
-        velocity.take_md_step(&force_prev, &force, self.dt, self.scheme);
+        velocity.take_md_step(&force, &force, self.dt, self.scheme);
+        displacement.take_md_step(&force, &velocity, self.dt, self.scheme);
 
         // scale the displacement according to max step
         displacement.rescale(self.max_step);
@@ -250,10 +264,17 @@ impl GradientBasedMinimizer for FIRE {
         let mut fx = f(x, &mut gx);
         let mut fx_prev = fx;
 
+        // Check convergence.
+        // Make sure that the initial variables are not a minimizer.
+        if gx.vec2norm() <= self.termination.max_gradient_norm {
+            info!("already converged.");
+            return;
+        }
+
         let ls = linesearch()
-            .with_max_iterations(20)
-            .with_algorithm("BackTracking");
-            // .with_algorithm("MoreThuente");
+            .with_max_iterations(40)
+            // .with_algorithm("BackTracking");
+            .with_algorithm("MoreThuente");
 
         let mut ncall = 1;
         for i in 1.. {
@@ -263,9 +284,9 @@ impl GradientBasedMinimizer for FIRE {
             self = self.propagate(&gx_prev, &gx);
 
             // save previous point
-            gx_prev.veccpy(&gx);
             x_prev.veccpy(&x);
             fx_prev = fx;
+            gx_prev.veccpy(&gx);
 
             // determine optimal step size along displacement
             if let Some(ref d) = self.displacement {
@@ -274,20 +295,20 @@ impl GradientBasedMinimizer for FIRE {
                 // perform line search
                 let mut dg = 0.0;
                 let mut step = 1.0;
-                let phi = |stp: f64| {
+                let phi = |trial_step: f64| {
                     // current point or trial point
-                    if stp == 0.0 {
+                    if trial_step == 0.0 {
                         (fx, d.vecdot(&gx))
                     } else {
                         // restore position
                         x.veccpy(&x_prev);
-                        x.vecadd(&d, stp);
-                        // update value and gradient
+                        x.vecadd(&d, trial_step);
+                        // update value and gradient at position `x`
                         let r = f(x, &mut gx);
                         // update data
                         ncall += 1;
                         fx = r;
-                        step = stp;
+                        step = trial_step;
 
                         (r, d.vecdot(&gx))
                     }
@@ -323,7 +344,7 @@ impl GradientBasedMinimizer for FIRE {
 }
 // entry:1 ends here
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*displacement][displacement:3]]
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*displacement][displacement:2]]
 use vecfx::*;
 
 /// Represents the displacement vector
@@ -339,7 +360,7 @@ impl Displacement {
         &mut self,
         force: &[f64],    // F(n)
         velocity: &[f64], // V(n)
-        timestep: f64,    // Δt
+        dt: f64,          // Δt
         scheme: MdScheme,
     ) {
         debug_assert!(
@@ -347,8 +368,7 @@ impl Displacement {
             "the sizes of input vectors are different!"
         );
 
-        let dt = timestep;
-        self.0 = velocity.to_vec();
+        self.0.veccpy(velocity);
         match scheme {
             // Velocity Verlet (VV) integration formula.
             //
@@ -363,7 +383,7 @@ impl Displacement {
             //
             // D = dt * V
             MdScheme::SemiImplicitEuler | MdScheme::ForwardEuler => {
-                self.0.vecscale(timestep);
+                self.0.vecscale(dt);
             }
         }
     }
@@ -396,12 +416,19 @@ impl Deref for Displacement {
         &self.0
     }
 }
-// displacement:3 ends here
+// displacement:2 ends here
 
-// velocity
-
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*velocity][velocity:1]]
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*velocity][velocity:2]]
 /// Represents the velocity vector
+///
+/// # Example
+/// 
+/// ```ignore
+/// let v = Velocity(vec![0.1, 0.2, 0.3]);
+/// v.reset();
+/// assert_eq!(0.0, v[1]);
+/// ```
+///
 #[derive(Debug, Clone)]
 pub struct Velocity(Vec<f64>);
 
@@ -463,4 +490,4 @@ impl Velocity {
         }
     }
 }
-// velocity:1 ends here
+// velocity:2 ends here

@@ -8,7 +8,6 @@
 //! * Bitzek, E. et al. Structural Relaxation Made Simple. Phys. Rev. Lett. 2006, 97 (17), 170201.
 //! * http://users.jyu.fi/~pekkosk/resources/pdf/FIRE.pdf
 //! * https://github.com/siesta-project/flos/blob/master/flos/optima/fire.lua
-
 pub mod line;
 pub mod lj;
 
@@ -37,6 +36,8 @@ pub use crate::fire::FIRE;
 // progress
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*progress][progress:1]]
+use vecfx::*;
+
 /// Important iteration data in minimization, useful for progress monitor or
 /// defining artificial termination criteria.
 #[repr(C)]
@@ -87,8 +88,13 @@ impl<'a> Progress<'a> {
     /// Print a summary about progress.
     pub fn report(&self) {
         println!(
-            "niter = {:5}, ncall= {:5}: fx = {:-10.4}, gnorm = {:-10.4}, step = {:-10.4}",
-            self.niter, self.ncall, self.fx, self.gnorm, self.step,
+            "niter = {:5}, ncall= {:5}: fx = {:-10.4}, gnorm = {:-10.4}, dnorm = {:-10.4} step = {:-10.4}",
+            self.niter,
+            self.ncall,
+            self.fx,
+            self.gnorm,
+            self.displacement.vec2norm(),
+            self.step,
         );
     }
 }
@@ -169,3 +175,46 @@ pub trait GradientBasedMinimizer: Sized {
         G: TerminationCriteria;
 }
 // minimizing interface:1 ends here
+
+// problem interface
+
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*problem%20interface][problem interface:1]]
+use self::common::*;
+
+/// Optimization problem
+pub trait Problem {
+    fn new<E>(x: &mut [f64], f: E) -> Self
+    where
+        E: FnMut(&[f64], &mut [f64]) -> Result<f64>;
+
+    /// Return search direction
+    fn search_direction(&self) -> &[f64];
+
+    /// Return search direction in mutable
+    fn search_direction_mut(&mut self) -> &mut [f64];
+
+    /// Define how to evaluate function value and gradient
+    fn evaluate(&mut self) -> Result<()>;
+
+    /// Return gradient norm
+    fn gnorm(&self) -> f64;
+
+    /// Rever to previous step
+    fn revert(&mut self);
+
+    /// Return initial step size
+    fn initial_step(&self) -> f64;
+
+    /// Take a line step along search direction
+    fn take_line_step(&mut self, stp: f64);
+
+    /// Compute the initial gradient in the search direction.
+    fn dg(&self) -> f64;
+
+    /// Compute the gradient in the search direction without sign checking.
+    fn dg_uncheck(&self) -> f64;
+
+    /// Return total number of evaluations.
+    fn nevaluations(&self) -> usize;
+}
+// problem interface:1 ends here
