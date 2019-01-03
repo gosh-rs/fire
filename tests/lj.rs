@@ -53,6 +53,7 @@ fn test_fire_opt() {
 
     let mut lj = LennardJones::default();
 
+    // option 1: quick call
     // fire()
     //     .with_max_step(0.2)
     //     .with_max_gradient_norm(0.4)
@@ -61,10 +62,10 @@ fn test_fire_opt() {
     //         energy
     //     });
 
-    // alternative interface
+    // option 2: alternative interface with user defined monitor
     fire()
         .with_max_step(0.2)
-        .with_max_cycles(1000)
+        .with_max_cycles(4000)
         .with_max_gradient_norm(0.1)
         .minimize_alt(
             &mut positions,

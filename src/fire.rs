@@ -192,21 +192,54 @@ impl FIRE {
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*core][core:1]]
 impl FIRE {
     /// Propagate the system for one simulation step using FIRE algorithm.
-    fn propagate(mut self, force_prev: &[f64], force: &[f64]) -> Self {
+    fn propagate<E>(
+        mut self,
+        force_prev: &mut [f64],
+        force: &mut [f64],
+        problem: &mut CachedProblem<E>,
+    ) -> Self
+    where
+        E: FnMut(&[f64], &mut [f64]) -> f64,
+    {
         // F0. prepare data
         let n = force.len();
         let mut velocity = self.velocity.unwrap_or(Velocity(vec![0.0; n]));
         // caching displacement for memory performance
         let mut displacement = self.displacement.unwrap_or(Displacement(vec![0.0; n]));
 
+        // F5. calculate displacement vectors based on a typical MD stepping algorithm
+        // update the internal velocity
+        match self.scheme {
+            MdScheme::VelocityVerlet | MdScheme::SemiImplicitEuler => {
+                // calculate x(n+1)
+                displacement.take_md_step(&force, &velocity, self.dt, self.scheme);
+                displacement.rescale(self.max_step);
+                // calculate F(n+1)
+                problem.take_line_step(&displacement, 1.0);
+                force.vecncpy(problem.gradient());
+                force_prev.vecncpy(problem.gradient_prev());
+                // calculate V(n+1)
+                velocity.take_md_step(&force_prev, &force, self.dt, self.scheme);
+            }
+            _ => {
+                velocity.take_md_step(&force_prev, &force, self.dt, self.scheme);
+                displacement.take_md_step(&force, &velocity, self.dt, self.scheme);
+                displacement.rescale(self.max_step);
+                problem.take_line_step(&displacement, 1.0);
+                // save state
+                force.vecncpy(problem.gradient());
+                force_prev.vecncpy(problem.gradient_prev());
+            }
+        }
+
         // F1. calculate the power: P = F·V
         let power = force.vecdot(&velocity);
 
+        // F2. adjust velocity
+        velocity.adjust(force, self.alpha);
+
         // F3 & F4: check the direction of power: go downhill or go uphill
         if power.is_sign_positive() {
-            // F2. adjust velocity
-            velocity.adjust(force, self.alpha);
-
             // F3. when go downhill
             // increase time step if we have go downhill for enough times
             if self.nsteps > self.n_min {
@@ -227,15 +260,6 @@ impl FIRE {
             velocity.reset();
         }
 
-        // F5. calculate displacement vectors based on a typical MD stepping algorithm
-        // update the internal velocity
-        velocity.take_md_step(&force_prev, &force, self.dt, self.scheme);
-        displacement.take_md_step(&force, &velocity, self.dt, self.scheme);
-
-        // scale the displacement according to max step
-        displacement.rescale(self.max_step);
-
-        // save state
         self.velocity = Some(velocity);
         self.displacement = Some(displacement);
         self
@@ -255,19 +279,11 @@ impl GradientBasedMinimizer for FIRE {
         E: FnMut(&[f64], &mut [f64]) -> f64,
         G: TerminationCriteria,
     {
-        let n = x.len();
-        let mut x_prev = x.to_vec();
-
-        let mut gx = vec![0.0; n];
-        let mut gx_prev = gx.clone();
-
-        // evaluate first
-        let mut fx = f(x, &mut gx);
-        let mut fx_prev = fx;
+        let mut problem = CachedProblem::new(x, f);
 
         // Check convergence.
         // Make sure that the initial variables are not a minimizer.
-        if gx.vec2norm() <= self.termination.max_gradient_norm {
+        if problem.gradient().vec2norm() <= self.termination.max_gradient_norm {
             info!("already converged.");
             return;
         }
@@ -275,56 +291,25 @@ impl GradientBasedMinimizer for FIRE {
         let ls = linesearch()
             .with_max_iterations(1)
             .with_algorithm("BackTracking");
-            //.with_algorithm("MoreThuente");
+            // .with_algorithm("MoreThuente");
 
-        let mut ncall = 1;
+        // FIRE algorithm uses force instead of gradient
+        let mut force = problem.gradient().to_vec();
+        force.vecscale(-1.0);
+        let mut force_prev = force.clone();
         for i in 1.. {
-            // cache gradient of previous step
-            // to force
-            gx.vecscale(-1.0);
-            self = self.propagate(&gx_prev, &gx);
-
-            // save previous point
-            x_prev.veccpy(&x);
-            fx_prev = fx;
-            gx_prev.veccpy(&gx);
-
-            // determine optimal step size along displacement
-            if let Some(ref d) = self.displacement {
-                // to gradient
-                gx.vecscale(-1.0);
-                // perform line search
-                let mut dg = 0.0;
-                let mut step = 1.0;
-                let phi = |trial_step: f64| {
-                    // current point or trial point
-                    if trial_step == 0.0 {
-                        (fx, d.vecdot(&gx))
-                    } else {
-                        // restore position
-                        x.veccpy(&x_prev);
-                        x.vecadd(&d, trial_step);
-                        // update value and gradient at position `x`
-                        let r = f(x, &mut gx);
-                        // update data
-                        ncall += 1;
-                        fx = r;
-                        step = trial_step;
-
-                        (r, d.vecdot(&gx))
-                    }
-                };
-                let _ = ls.find(phi).expect("ls");
-
+            self = self.propagate(&mut force_prev, &mut force, &mut problem);
+            if let Some(ref displ) = self.displacement {
+                let fx = problem.value();
                 let progress = Progress {
-                    niter: i,
-                    gx: &gx,
-                    gnorm: gx.vec2norm(),
-                    displacement: d,
                     x,
                     fx,
-                    step,
-                    ncall,
+                    step: 1.0,
+                    niter: i,
+                    gx: &force,
+                    gnorm: force.vec2norm(),
+                    displacement: displ,
+                    ncall: problem.ncalls(),
                 };
 
                 if let Some(ref mut stopping) = stopping {
@@ -338,7 +323,7 @@ impl GradientBasedMinimizer for FIRE {
                     break;
                 }
             } else {
-                panic!("bad");
+                unreachable!()
             }
         }
     }
