@@ -16,26 +16,6 @@ use crate::CachedProblem;
 use crate::common::*;
 // header:1 ends here
 
-// scheme
-
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*scheme][scheme:1]]
-/// MD Integration formulations for position update and velocity update
-#[derive(Clone, Copy, Debug)]
-pub enum MdScheme {
-    ForwardEuler,
-    VelocityVerlet,
-    SemiImplicitEuler,
-}
-
-impl Default for MdScheme {
-    fn default() -> Self {
-        MdScheme::VelocityVerlet
-        //MdScheme::SemiImplicitEuler
-        //MdScheme::ForwardEuler
-    }
-}
-// scheme:1 ends here
-
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*base][base:2]]
 /// The Fast-Inertial-Relaxation-Engine (FIRE) algorithm
 ///
@@ -138,6 +118,27 @@ impl Default for FIRE {
 }
 // base:2 ends here
 
+// scheme
+
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*scheme][scheme:1]]
+/// MD Integration formulations for position update and velocity update
+#[derive(Clone, Copy, Debug)]
+pub enum MdScheme {
+    /// Velocity Verlet
+    VelocityVerlet,
+    /// Semi-implicit Euler algorithm. I think this is the algorithm implemented
+    /// in ASE.
+    SemiImplicitEuler,
+}
+
+impl Default for MdScheme {
+    fn default() -> Self {
+        MdScheme::VelocityVerlet
+        // MdScheme::SemiImplicitEuler
+    }
+}
+// scheme:1 ends here
+
 // builder
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*builder][builder:1]]
@@ -158,7 +159,7 @@ impl FIRE {
         match scheme {
             "SE" => self.scheme = MdScheme::SemiImplicitEuler,
             "VV" => self.scheme = MdScheme::VelocityVerlet,
-            "FE" => self.scheme = MdScheme::ForwardEuler,
+            "ASE" => self.scheme = MdScheme::SemiImplicitEuler,
             _ => unimplemented!(),
         }
         self
@@ -207,10 +208,10 @@ impl FIRE {
         // caching displacement for memory performance
         let mut displacement = self.displacement.unwrap_or(Displacement(vec![0.0; n]));
 
-        // F5. calculate displacement vectors based on a typical MD stepping algorithm
+        // MD. calculate displacement vectors based on a typical MD stepping algorithm
         // update the internal velocity
         match self.scheme {
-            MdScheme::VelocityVerlet | MdScheme::SemiImplicitEuler => {
+            MdScheme::VelocityVerlet => {
                 // calculate x(n+1)
                 displacement.take_md_step(&force, &velocity, self.dt, self.scheme);
                 displacement.rescale(self.max_step);
@@ -221,7 +222,7 @@ impl FIRE {
                 // calculate V(n+1)
                 velocity.take_md_step(&force_prev, &force, self.dt, self.scheme);
             }
-            _ => {
+            MdScheme::SemiImplicitEuler => {
                 velocity.take_md_step(&force_prev, &force, self.dt, self.scheme);
                 displacement.take_md_step(&force, &velocity, self.dt, self.scheme);
                 displacement.rescale(self.max_step);
@@ -230,6 +231,7 @@ impl FIRE {
                 force.vecncpy(problem.gradient());
                 force_prev.vecncpy(problem.gradient_prev());
             }
+            _ => unreachable!(),
         }
 
         // F1. calculate the power: P = F·V
@@ -365,10 +367,10 @@ impl Displacement {
                 // D += 0.5 * dt^2 * F
                 self.0.vecadd(force, 0.5 * dt.powi(2));
             }
-            // Semi-implicit Euler (SE) or Forward Euler (FE)
+            // Semi-implicit Euler (SE)
             //
             // D = dt * V
-            MdScheme::SemiImplicitEuler | MdScheme::ForwardEuler => {
+            MdScheme::SemiImplicitEuler => {
                 self.0.vecscale(dt);
             }
         }
@@ -467,10 +469,6 @@ impl Velocity {
             }
             // V(n+1) = V(n) + dt· F(n+1)
             MdScheme::SemiImplicitEuler => {
-                self.0.vecadd(force_next, dt);
-            }
-            // V(n+1) = V(n) + dt· F(n)
-            MdScheme::ForwardEuler => {
                 self.0.vecadd(force_this, dt);
             }
         }
