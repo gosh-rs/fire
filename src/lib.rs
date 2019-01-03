@@ -176,45 +176,118 @@ pub trait GradientBasedMinimizer: Sized {
 }
 // minimizing interface:1 ends here
 
-// problem interface
+// cached
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*problem%20interface][problem interface:1]]
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*cached][cached:1]]
 use self::common::*;
 
-/// Optimization problem
-pub trait Problem {
-    fn new<E>(x: &mut [f64], f: E) -> Self
-    where
-        E: FnMut(&[f64], &mut [f64]) -> Result<f64>;
+/// Cached function for avoiding unnecessary re-evaluations.
+pub struct CachedProblem<'a, E>
+where
+    E: FnMut(&[f64], &mut [f64]) -> f64,
+{
+    f: E,
+    x: &'a mut [f64],
+    fx: Option<f64>,
+    gx: Option<Vec<f64>>,
 
-    /// Return search direction
-    fn search_direction(&self) -> &[f64];
-
-    /// Return search direction in mutable
-    fn search_direction_mut(&mut self) -> &mut [f64];
-
-    /// Define how to evaluate function value and gradient
-    fn evaluate(&mut self) -> Result<()>;
-
-    /// Return gradient norm
-    fn gnorm(&self) -> f64;
-
-    /// Rever to previous step
-    fn revert(&mut self);
-
-    /// Return initial step size
-    fn initial_step(&self) -> f64;
-
-    /// Take a line step along search direction
-    fn take_line_step(&mut self, stp: f64);
-
-    /// Compute the initial gradient in the search direction.
-    fn dg(&self) -> f64;
-
-    /// Compute the gradient in the search direction without sign checking.
-    fn dg_uncheck(&self) -> f64;
-
-    /// Return total number of evaluations.
-    fn nevaluations(&self) -> usize;
+    epsilon: f64,
+    neval: usize,
 }
-// problem interface:1 ends here
+
+impl<'a, E> CachedProblem<'a, E>
+where
+    E: FnMut(&[f64], &mut [f64]) -> f64,
+{
+    /// Construct a CachedProblem
+    ///
+    /// # Parameters
+    ///
+    /// * x: initial position
+    /// * f: a closure for function evaluation of value and gradient.
+    pub fn new(x: &'a mut [f64], f: E) -> Self {
+        CachedProblem {
+            x,
+            f,
+            epsilon: 1e-8,
+            fx: None,
+            gx: None,
+            neval: 0,
+        }
+    }
+
+    /// The number of function calls
+    pub fn ncalls(&self) -> usize {
+        self.neval
+    }
+
+    /// Evaluate function value and gradient at the point specified by
+    /// displacement vector
+    fn eval_at(&mut self, displacement: &[f64]) -> (f64, &[f64]) {
+        // position changed
+        if displacement.vec2norm() > self.epsilon {
+            // update position vector with displacement
+            self.x.vecadd(displacement, 1.0);
+            self.eval()
+        } else {
+            if let Some(fx) = self.fx {
+                if let Some(ref gx) = self.gx {
+                    return (fx, gx);
+                }
+                unreachable!()
+            } else {
+                self.eval()
+            }
+        }
+    }
+
+    fn eval(&mut self) -> (f64, &[f64]) {
+        let n = self.x.len();
+
+        let gx: &mut [f64] = self.gx.get_or_insert(vec![0.0; n]);
+        let v = (self.f)(&self.x, gx);
+        self.fx = Some(v);
+        self.neval += 1;
+
+        (v, gx)
+    }
+
+    /// Return function value at the position after applying displacement.
+    ///
+    /// The function will be evaluated when necessary.
+    pub fn value(&mut self, displacement: &[f64]) -> f64 {
+        match self.fx {
+            // found cached value. needs re-evaluation if the displacement is
+            // significant.
+            Some(v) => {
+                let (fx, _) = self.eval_at(displacement);
+                fx
+            }
+            // first time calculation
+            None => {
+                let (fx, _) = self.eval();
+                fx
+            }
+        }
+    }
+
+    /// Return a reference to gradient at the position after applying displacement.
+    ///
+    /// The function will be evaluated when necessary.
+    pub fn gradient(&mut self, displacement: &[f64]) -> &[f64] {
+        match self.fx {
+            // found cached value. needs re-evaluation if the displacement is
+            // significant.
+            Some(v) => {
+                let (_, gx) = self.eval_at(displacement);
+                gx
+            }
+            // first time calculation
+            None => {
+                let (_, gx) = self.eval();
+                gx
+            }
+        }
+    }
+}
+// cached:1 ends here

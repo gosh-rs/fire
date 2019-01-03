@@ -29,8 +29,8 @@ pub enum MdScheme {
 impl Default for MdScheme {
     fn default() -> Self {
         MdScheme::VelocityVerlet
-        // MdScheme::SemiImplicitEuler
-        // MdScheme::ForwardEuler
+        //MdScheme::SemiImplicitEuler
+        //MdScheme::ForwardEuler
     }
 }
 // scheme:1 ends here
@@ -228,7 +228,7 @@ impl FIRE {
 
         // F5. calculate displacement vectors based on a typical MD stepping algorithm
         // update the internal velocity
-        velocity.take_md_step(&force, &force, self.dt, self.scheme);
+        velocity.take_md_step(&force_prev, &force, self.dt, self.scheme);
         displacement.take_md_step(&force, &velocity, self.dt, self.scheme);
 
         // scale the displacement according to max step
@@ -272,9 +272,9 @@ impl GradientBasedMinimizer for FIRE {
         }
 
         let ls = linesearch()
-            .with_max_iterations(40)
-            // .with_algorithm("BackTracking");
-            .with_algorithm("MoreThuente");
+            .with_max_iterations(1)
+            .with_algorithm("BackTracking");
+            //.with_algorithm("MoreThuente");
 
         let mut ncall = 1;
         for i in 1.. {
