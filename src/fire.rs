@@ -12,6 +12,7 @@ use crate::Termination;
 use crate::UserTermination;
 use crate::TerminationCriteria;
 use crate::GradientBasedMinimizer;
+use crate::CachedProblem;
 use crate::common::*;
 // header:1 ends here
 

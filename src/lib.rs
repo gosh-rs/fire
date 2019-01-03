@@ -176,26 +176,47 @@ pub trait GradientBasedMinimizer: Sized {
 }
 // minimizing interface:1 ends here
 
+// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*docs][docs:2]]
+use self::common::*;
+
+/// Represents an optimization problem with cache for avoiding unnecessary
+/// function re-evaluations.
+///
+/// # Examples
+///
+/// ```ignore
+/// let mut x = vec![0.0; 5];
+/// let mut prb = CachedProblem::new(&x, f);
+/// let d = [0.2; 5];
+/// prb.take_line_step(&d, 1.0);
+/// let fx = prb.value();
+/// let gx = prb.gradient();
+/// ```
+// docs:2 ends here
+
 // cached
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*cached][cached:1]]
-use self::common::*;
-
-/// Cached function for avoiding unnecessary re-evaluations.
-pub struct CachedProblem<'a, E>
+#[derive(Clone, Debug)]
+pub struct CachedProblem<E>
 where
     E: FnMut(&[f64], &mut [f64]) -> f64,
 {
     f: E,
-    x: &'a mut [f64],
+    x: Vec<f64>,
     fx: Option<f64>,
     gx: Option<Vec<f64>>,
 
     epsilon: f64,
     neval: usize,
+
+    // cache previous point
+    x_prev: Vec<f64>,
+    fx_prev: Option<f64>,
+    gx_prev: Option<Vec<f64>>,
 }
 
-impl<'a, E> CachedProblem<'a, E>
+impl<E> CachedProblem<E>
 where
     E: FnMut(&[f64], &mut [f64]) -> f64,
 {
@@ -205,14 +226,17 @@ where
     ///
     /// * x: initial position
     /// * f: a closure for function evaluation of value and gradient.
-    pub fn new(x: &'a mut [f64], f: E) -> Self {
+    pub fn new(x: &[f64], f: E) -> Self {
         CachedProblem {
-            x,
             f,
             epsilon: 1e-8,
+            x: x.to_vec(),
             fx: None,
             gx: None,
             neval: 0,
+            x_prev: x.to_vec(),
+            fx_prev: None,
+            gx_prev: None,
         }
     }
 
@@ -221,26 +245,20 @@ where
         self.neval
     }
 
-    /// Evaluate function value and gradient at the point specified by
-    /// displacement vector
-    fn eval_at(&mut self, displacement: &[f64]) -> (f64, &[f64]) {
+    /// Update position `x` at a prescribed displacement and step size.
+    ///
+    /// x += step * displ
+    pub fn take_line_step(&mut self, displ: &[f64], step: f64) {
         // position changed
-        if displacement.vec2norm() > self.epsilon {
+        if step * displ.vec2norm() > self.epsilon {
             // update position vector with displacement
-            self.x.vecadd(displacement, 1.0);
-            self.eval()
-        } else {
-            if let Some(fx) = self.fx {
-                if let Some(ref gx) = self.gx {
-                    return (fx, gx);
-                }
-                unreachable!()
-            } else {
-                self.eval()
-            }
+            self.x.vecadd(displ, step);
+            self.fx = None;
+            self.gx = None;
         }
     }
 
+    /// evaluate function value and gradient at current position
     fn eval(&mut self) -> (f64, &[f64]) {
         let n = self.x.len();
 
@@ -249,20 +267,21 @@ where
         self.fx = Some(v);
         self.neval += 1;
 
+        // update previous point
+        self.fx_prev = self.fx;
+        self.x_prev = self.x.clone();
+        self.gx_prev = Some(gx.to_vec());
+
         (v, gx)
     }
 
-    /// Return function value at the position after applying displacement.
+    /// Return function value at current position.
     ///
     /// The function will be evaluated when necessary.
-    pub fn value(&mut self, displacement: &[f64]) -> f64 {
+    pub fn value(&mut self) -> f64 {
         match self.fx {
-            // found cached value. needs re-evaluation if the displacement is
-            // significant.
-            Some(v) => {
-                let (fx, _) = self.eval_at(displacement);
-                fx
-            }
+            // found cached value.
+            Some(v) => v,
             // first time calculation
             None => {
                 let (fx, _) = self.eval();
@@ -271,23 +290,46 @@ where
         }
     }
 
-    /// Return a reference to gradient at the position after applying displacement.
+    /// Return function value at previous point
+    pub fn value_prev(&self) -> f64 {
+        match self.fx_prev {
+            Some(fx) => fx,
+            None => panic!("not evaluated yet"),
+        }
+    }
+
+    pub fn gradient_prev(&self) -> &[f64] {
+        match self.gx_prev {
+            Some(ref gx) => gx,
+            None => panic!("not evaluated yet"),
+        }
+    }
+
+    /// Return a reference to gradient at current position.
     ///
     /// The function will be evaluated when necessary.
-    pub fn gradient(&mut self, displacement: &[f64]) -> &[f64] {
-        match self.fx {
-            // found cached value. needs re-evaluation if the displacement is
-            // significant.
-            Some(v) => {
-                let (_, gx) = self.eval_at(displacement);
-                gx
-            }
+    pub fn gradient(&mut self) -> &[f64] {
+        match self.gx {
+            // found cached value.
+            Some(ref gx) => gx,
             // first time calculation
             None => {
                 let (_, gx) = self.eval();
                 gx
             }
         }
+    }
+
+    /// Return a reference to current position vector.
+    pub fn position(&self) -> &[f64] {
+        &self.x
+    }
+
+    /// Revert to previous point
+    pub fn revert(&mut self) {
+        self.fx = self.fx_prev;
+        self.x.veccpy(&self.x_prev);
+        self.gx = self.gx_prev.clone();
     }
 }
 // cached:1 ends here
