@@ -60,12 +60,16 @@ pub struct FIRE {
     /// The default value is 5.
     pub n_min: usize,
 
-    /// adaptive time step for integration of the equations of motion
+    /// adaptive time step for integration of the equations of motion. The
+    /// initial value is 0.1.
     dt: f64,
 
     /// The maximum time step as in the paper. Do not change this, change
     /// max_step instead.
     dt_max: f64,
+
+    /// The minimum time step when decreasing `dt`. The default is 0.01.
+    dt_min: f64,
 
     /// Adaptive parameter that controls the velocity used to evolve the system.
     alpha: f64,
@@ -104,6 +108,7 @@ impl Default for FIRE {
 
             // counters or adaptive parameters
             dt: 0.10,
+            dt_min: 0.01,
             alpha: 0.10,
             nsteps: 0,
             velocity: None,
@@ -234,14 +239,14 @@ impl FIRE {
             _ => unreachable!(),
         }
 
-        // F1. calculate the power: P = F·V
-        let power = force.vecdot(&velocity);
+        // F1. calculate power for uphill/downhill check
+        let downhill = force.vecdot(&velocity).is_sign_positive();
 
         // F2. adjust velocity
         velocity.adjust(force, self.alpha);
 
-        // F3 & F4: check the direction of power: go downhill or go uphill
-        if power.is_sign_positive() {
+        // F3 & F4: check the direction: go downhill or go uphill
+        if downhill {
             // F3. when go downhill
             // increase time step if we have go downhill for enough times
             if self.nsteps > self.n_min {
@@ -252,8 +257,7 @@ impl FIRE {
             self.nsteps += 1;
         } else {
             // F4. when go uphill
-            // decrease time-step
-            self.dt *= self.f_dec;
+            self.dt = self.dt_min.max(self.dt * self.f_dec);
             // reset alpha
             self.alpha = self.alpha_start;
             // reset step counter
