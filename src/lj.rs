@@ -4,6 +4,7 @@
 // :END:
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*lj.rs][lj.rs:1]]
+use crate::common::*;
 use vecfx::*;
 
 #[derive(Clone, Copy, Debug)]
@@ -43,25 +44,34 @@ impl LennardJones {
         debug_assert_eq!(n, forces.len(), "positions.len() != forces.len()");
 
         // initialize with zeros
-        let mut energy = 0.0;
         for i in 0..n {
             for j in 0..3 {
                 forces[i][j] = 0.0;
             }
         }
 
-        // calculate energy and forces
-        for i in 0..n {
-            for j in 0..i {
-                let r = positions[i].vecdist(&positions[j]);
-                energy += self.pair_energy(r);
+        // collect parts in parallel
+        let parts: Vec<_> = (0..n)
+            .into_par_iter()
+            .flat_map(|i| {
+                (0..i).into_par_iter().map(move |j| {
+                    let r = positions[i].vecdist(&positions[j]);
+                    let e = self.pair_energy(r);
+                    let g = self.pair_gradient(r) / r;
+                    (e, g, (i, j))
+                })
+            })
+            .collect();
 
-                let g = self.pair_gradient(r);
-                for k in 0..3 {
-                    let dr = positions[j][k] - positions[i][k];
-                    forces[i][k] += 1.0 * g * dr / r;
-                    forces[j][k] += -1.0 * g * dr / r;
-                }
+        // calculate energy
+        let energy: f64 = parts.iter().map(|(e, _, _)| *e).sum();
+
+        // calculate force
+        for (_, g, (i, j)) in parts {
+            for k in 0..3 {
+                let dr = positions[j][k] - positions[i][k];
+                forces[i][k] += 1.0 * g * dr;
+                forces[j][k] += -1.0 * g * dr;
             }
         }
 
