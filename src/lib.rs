@@ -80,6 +80,11 @@ impl<'a> Progress<'a> {
         self.fx
     }
 
+    /// Return the number of function calls
+    pub fn ncalls(&self) -> usize {
+        self.ncall
+    }
+
     /// Return a reference to displacement vector.
     pub fn displacement(&self) -> &'a [f64] {
         self.displacement
@@ -323,6 +328,11 @@ where
     /// Return a reference to current position vector.
     pub fn position(&self) -> &[f64] {
         &self.x
+    }
+
+    /// Update position from `p`
+    pub fn set_position(&mut self, p: &[f64]) {
+        self.x.veccpy(p);
     }
 
     /// Revert to previous point
