@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["LineSearchAlgorithm","Line search algorithms."],["LineSearchCondition",""]],"fn":[["linesearch","A unified interface to line search methods."]],"struct":[["LineSearch",""]],"trait":[["LineSearchFind",""]]});

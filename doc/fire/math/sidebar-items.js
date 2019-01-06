@@ -1,0 +1,1 @@
+initSidebarItems({"trait":[["FloatVectorMath","Abstracting simple vector based math operations"]]});
