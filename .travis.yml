@@ -33,13 +33,11 @@ script:
       cargo doc --no-deps
 
 after_success:
-# measure code coverage and upload to coveralls.io
-  - cargo coveralls
 # upload documentation to github.io (gh-pages branch)
   - cargo doc-upload --token e9e46b42ee40a2883f410900cc09794443ff6108
 
 notifications:
-    email: false
+  email: false
 
 branches:
-only: master
+  only: master
