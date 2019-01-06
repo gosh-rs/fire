@@ -5,6 +5,13 @@
 [![GPL3 licensed](https://img.shields.io/badge/license-GPL3-blue.svg)](./LICENSE)
 
 
+# Features
+
+-   Fast & Reliable Rust implementation.
+-   MD integration schemes: VelocityVerlet, Semi-implicit Euler method
+-   line search for optimal step sizes.
+
+
 # References
 
 -   Bitzek, E.; Koskinen, P.; Gähler, F.; Moseler, M.; Gumbsch, P. Structural
