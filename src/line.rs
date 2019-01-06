@@ -611,7 +611,6 @@ mod mcsrch {
 
             let mut brackt = false;
             let mut stage1 = 1;
-            let mut uinfo = 0;
 
             let dgtest = self.ftol * dginit;
             let mut width = self.max_step - self.min_step;
@@ -655,8 +654,7 @@ mod mcsrch {
                 if brackt
                     && (*stp <= stmin
                         || stmax <= *stp
-                        || self.max_iterations <= count + 1
-                        || uinfo != 0)
+                        || self.max_iterations <= count + 1)
                     || brackt && stmax - stmin <= self.xtol * stmax
                 {
                     *stp = stx
@@ -668,13 +666,15 @@ mod mcsrch {
                 let ftest1 = finit + *stp * dgtest;
 
                 // Test for errors and convergence.
-                if brackt && (*stp <= stmin || stmax <= *stp || uinfo != 0i32) {
+                if brackt && (*stp <= stmin || stmax <= *stp) {
                     // Rounding errors prevent further progress.
-                    // FIXME
-                    bail!(
+                    // FIXME: better error type
+                    warn!(
                         "A rounding error occurred; alternatively, no line-search step
 satisfies the sufficient decrease and curvature conditions."
                     );
+
+                    return Ok(count);
                 }
 
                 if brackt && stmax - stmin <= self.xtol * stmax {
@@ -718,7 +718,7 @@ satisfies the sufficient decrease and curvature conditions."
 
                         // Call update_trial_interval() to update the interval of
                         // uncertainty and to compute the new step.
-                        uinfo = mcstep::update_trial_interval(
+                        mcstep::update_trial_interval(
                             &mut stx,
                             &mut fxm,
                             &mut dgxm,
@@ -739,7 +739,7 @@ satisfies the sufficient decrease and curvature conditions."
                         dgx = dgxm + dgtest;
                         dgy = dgym + dgtest
                     } else {
-                        uinfo = mcstep::update_trial_interval(
+                        mcstep::update_trial_interval(
                             &mut stx,
                             &mut fx,
                             &mut dgx,
@@ -829,9 +829,6 @@ mod mcstep {
     /// minimizer has not been bracketed then on input brackt must be set false.
     /// If the minimizer is bracketed then on output `brackt` is set true.
     ///
-    /// # Return
-    /// - Status value. Zero indicates a normal termination.
-    ///
     pub(crate) fn update_trial_interval(
         x: &mut f64,
         fx: &mut f64,
@@ -845,7 +842,7 @@ mod mcstep {
         tmin: f64,
         tmax: f64,
         brackt: &mut bool,
-    ) -> Result<i32> {
+    ) -> Result<()> {
         // fsigndiff
         let dsign = dt * (*dx / (*dx).abs()) < 0.0;
         // minimizer of an interpolated cubic.
@@ -991,7 +988,7 @@ mod mcstep {
         // Return the new trial value.
         *t = newt;
 
-        Ok(0)
+        Ok(())
     }
 }
 // mcstep:1 ends here
