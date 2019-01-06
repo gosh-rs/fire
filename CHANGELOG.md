@@ -1,5 +1,14 @@
 
-# <span class="timestamp-wrapper"><span class="timestamp">[2019-01-01 Tue] </span></span> v0.0.4
+# <span class="timestamp-wrapper"><span class="timestamp">[2019-01-06 Sun] </span></span> v0.0.5
+
+-   added \`CachedProblem\` struct to cache function evaluations.
+-   improved the performance of VelocityVerlet MD scheme
+-   removed ForwardEuler scheme from MD options for its bad performance.
+-   new parameter \`dt\_min\` to avoid stagnation in minimization.
+-   new builder option: with\_line\_search()
+
+
+# <span class="timestamp-wrapper"><span class="timestamp">[2019-01-02 Wed] </span></span> v0.0.4
 
 -   simplify the callback function in LineSearch.
 -   add options to set MD integration scheme.
