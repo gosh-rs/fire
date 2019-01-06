@@ -89,8 +89,8 @@ pub struct FIRE {
     /// MD scheme
     scheme: MdScheme,
 
-    /// line search algorithm
-    linesearch: Option<LineSearchAlgorithm>,
+    /// Apply line search for optimal step size.
+    use_line_search: bool,
 }
 
 impl Default for FIRE {
@@ -108,7 +108,7 @@ impl Default for FIRE {
 
             // counters or adaptive parameters
             dt: 0.10,
-            dt_min: 0.01,
+            dt_min: 0.02,
             alpha: 0.10,
             nsteps: 0,
             velocity: None,
@@ -117,7 +117,7 @@ impl Default for FIRE {
             // others
             termination: Termination::default(),
             scheme: MdScheme::default(),
-            linesearch: None,
+            use_line_search: false,
         }
     }
 }
@@ -184,11 +184,12 @@ impl FIRE {
         self
     }
 
-    /// Enable line search of optimal step size using algorithm `alg`.
+    /// Enable line search of optimal step size.
     ///
     /// The default is no line search.
-    pub fn with_line_search(mut self, alg: &str) -> Self {
-        unimplemented!()
+    pub fn with_line_search(mut self) -> Self {
+        self.use_line_search = true;
+        self
     }
 }
 // builder:1 ends here
@@ -215,29 +216,38 @@ impl FIRE {
 
         // MD. calculate displacement vectors based on a typical MD stepping algorithm
         // update the internal velocity
-        match self.scheme {
-            MdScheme::VelocityVerlet => {
-                // calculate x(n+1)
-                displacement.take_md_step(&force, &velocity, self.dt, self.scheme);
-                displacement.rescale(self.max_step);
-                // calculate F(n+1)
-                problem.take_line_step(&displacement, 1.0);
-                force.vecncpy(problem.gradient());
-                force_prev.vecncpy(problem.gradient_prev());
-                // calculate V(n+1)
-                velocity.take_md_step(&force_prev, &force, self.dt, self.scheme);
-            }
-            MdScheme::SemiImplicitEuler => {
-                velocity.take_md_step(&force_prev, &force, self.dt, self.scheme);
-                displacement.take_md_step(&force, &velocity, self.dt, self.scheme);
-                displacement.rescale(self.max_step);
-                problem.take_line_step(&displacement, 1.0);
-                // save state
-                force.vecncpy(problem.gradient());
-                force_prev.vecncpy(problem.gradient_prev());
-            }
-            _ => unreachable!(),
-        }
+        velocity.take_md_step(&force_prev, &force, self.dt, self.scheme);
+        displacement.take_md_step(&force, &velocity, self.dt, self.scheme);
+        displacement.rescale(self.max_step);
+
+        // perform line search
+        let nls = if self.use_line_search {
+            info!("line search for optimal step size using MoreThuente algorithm.");
+            40
+        } else {
+            1
+        };
+        let ls = linesearch()
+            .with_max_iterations(nls)
+            .with_algorithm("MoreThuente");
+
+        let mut step = 1.0;
+        let x_prev = problem.position().to_vec();
+        let phi = |trial_step: f64| {
+            // restore position
+            problem.set_position(&x_prev);
+            // update value and gradient at position `x`
+            problem.take_line_step(&displacement, trial_step);
+            step = trial_step;
+            let fx = problem.value();
+
+            (fx, displacement.vecdot(&problem.gradient()))
+        };
+        let _ = ls.find(phi).expect("ls");
+
+        // save state
+        force.vecncpy(problem.gradient());
+        force_prev.vecncpy(problem.gradient_prev());
 
         // F1. calculate power for uphill/downhill check
         let downhill = force.vecdot(&velocity).is_sign_positive();
@@ -294,11 +304,6 @@ impl GradientBasedMinimizer for FIRE {
             return;
         }
 
-        let ls = linesearch()
-            .with_max_iterations(1)
-            .with_algorithm("BackTracking");
-            // .with_algorithm("MoreThuente");
-
         // FIRE algorithm uses force instead of gradient
         let mut force = problem.gradient().to_vec();
         force.vecscale(-1.0);
@@ -307,6 +312,7 @@ impl GradientBasedMinimizer for FIRE {
             self = self.propagate(&mut force_prev, &mut force, &mut problem);
             if let Some(ref displ) = self.displacement {
                 let fx = problem.value();
+
                 let progress = Progress {
                     x,
                     fx,
@@ -325,7 +331,7 @@ impl GradientBasedMinimizer for FIRE {
                 }
 
                 if self.termination.met(&progress) {
-                    println!("normal termination!");
+                    info!("normal termination!");
                     break;
                 }
             } else {
