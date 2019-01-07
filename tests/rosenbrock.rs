@@ -35,7 +35,7 @@ fn test() {
         fx
     };
 
-    /// 3. let's FIRE!
+    // 3. let's FIRE!
     fire()
         .with_max_step(0.20)
         .with_max_cycles(5000)

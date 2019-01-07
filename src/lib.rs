@@ -8,6 +8,19 @@
 //! * Bitzek, E. et al. Structural Relaxation Made Simple. Phys. Rev. Lett. 2006, 97 (17), 170201.
 //! * http://users.jyu.fi/~pekkosk/resources/pdf/FIRE.pdf
 //! * https://github.com/siesta-project/flos/blob/master/flos/optima/fire.lua
+//! 
+//! Usage
+//! -----
+//! ```
+//! use fire::*;
+//! 
+//! let mut x = [0.0];
+//! fire().minimize(&mut x, |x, gx| {
+//!     let fx = (x[0] - 1.).powi(2);
+//!     gx[0] = 2.0 * (x[0] - 1.0);
+//!     fx
+//! });
+//! ```
 pub mod line;
 pub mod lj;
 

@@ -12,6 +12,18 @@
 -   line search for optimal step size.
 
 
+# Usage
+
+    use fire::*;
+    
+    let mut x = [0.0];
+    fire().minimize(&mut x, |x, gx| {
+        let fx = (x[0] - 1.).powi(2);
+        gx[0] = 2.0 * (x[0] - 1.0);
+        fx
+    });
+
+
 # References
 
 -   Bitzek, E.; Koskinen, P.; Gähler, F.; Moseler, M.; Gumbsch, P. Structural
