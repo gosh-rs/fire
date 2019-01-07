@@ -54,7 +54,7 @@ pub struct Progress<'a> {
     ncall: usize,
 
     /// The line-search step used for this iteration.
-    pub step: f64,
+    step: f64,
 
     /// displacement vector over input variables vector
     displacement: &'a [f64],
@@ -182,8 +182,6 @@ pub trait GradientBasedMinimizer: Sized {
 // minimizing interface:1 ends here
 
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*docs][docs:2]]
-use self::common::*;
-
 /// Represents an optimization problem with cache for avoiding unnecessary
 /// function re-evaluations.
 ///

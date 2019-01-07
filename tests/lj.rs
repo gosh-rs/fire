@@ -51,7 +51,7 @@ fn test_fire_opt() {
     49.10265035,     52.00399992,     52.61150826,
     49.66462610,     47.60012985,     50.93620680];
 
-    let mut lj = LennardJones::default();
+    let lj = LennardJones::default();
 
     // option 1: quick call
     // fire()

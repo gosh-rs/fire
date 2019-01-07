@@ -9,7 +9,6 @@
 
 use crate::Progress;
 use crate::Termination;
-use crate::UserTermination;
 use crate::TerminationCriteria;
 use crate::GradientBasedMinimizer;
 use crate::CachedProblem;
@@ -232,7 +231,6 @@ impl FIRE {
             .with_algorithm("MoreThuente");
 
         let mut step = 1.0;
-        let x_prev = problem.position().to_vec();
         let phi = |trial_step: f64| {
             // restore position
             // problem.set_position(&x_prev);
@@ -397,12 +395,6 @@ impl Displacement {
             let s = max_disp / norm;
             self.0.vecscale(s);
         }
-    }
-
-    /// Apply displacement vector to `x`
-    /// x += d
-    pub fn apply(&self, x: &mut [f64]) {
-        x.vecadd(self, 1.0);
     }
 }
 

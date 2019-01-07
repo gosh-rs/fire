@@ -164,7 +164,6 @@ impl LineSearch {
                 ls.condition = LineSearchCondition::Armijo;
                 ls.find(&mut step, phi)
             }
-            _ => unimplemented!(),
         }
     }
 }
