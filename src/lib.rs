@@ -250,19 +250,6 @@ where
         self.neval
     }
 
-    /// Update position `x` at a prescribed displacement and step size.
-    ///
-    /// x += step * displ
-    pub fn take_line_step(&mut self, displ: &[f64], step: f64) {
-        // position changed
-        if step * displ.vec2norm() > self.epsilon {
-            // update position vector with displacement
-            self.x.vecadd(displ, step);
-            self.fx = None;
-            self.gx = None;
-        }
-    }
-
     /// evaluate function value and gradient at current position
     fn eval(&mut self) -> (f64, &[f64]) {
         let n = self.x.len();
@@ -330,9 +317,17 @@ where
         &self.x
     }
 
-    /// Update position from `p`
-    pub fn set_position(&mut self, p: &[f64]) {
-        self.x.veccpy(p);
+    /// Update position `x` at a prescribed displacement and step size.
+    ///
+    /// x += step * displ
+    pub fn take_line_step(&mut self, displ: &[f64], step: f64) {
+        // position changed
+        if step * displ.vec2norm() > self.epsilon {
+            // update position vector with displacement
+            self.x.vecadd(displ, step);
+            self.fx = None;
+            self.gx = None;
+        }
     }
 
     /// Revert to previous point

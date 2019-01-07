@@ -8,8 +8,8 @@
 # Features
 
 -   Fast & Reliable Rust implementation.
--   MD integration schemes: VelocityVerlet, Semi-implicit Euler method
--   line search for optimal step sizes.
+-   MD integration schemes: Velocity Verlet and Semi-implicit Euler methods
+-   line search for optimal step size.
 
 
 # References

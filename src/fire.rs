@@ -235,7 +235,8 @@ impl FIRE {
         let x_prev = problem.position().to_vec();
         let phi = |trial_step: f64| {
             // restore position
-            problem.set_position(&x_prev);
+            // problem.set_position(&x_prev);
+            problem.revert();
             // update value and gradient at position `x`
             problem.take_line_step(&displacement, trial_step);
             step = trial_step;
