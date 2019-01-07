@@ -10,7 +10,7 @@ fn test() {
     use fire::monitor;
     use fire::GradientBasedMinimizer;
 
-    // 1. Initialize data
+    // 1. Initialize input variables
     const N: usize = 100;
 
     let mut x = [0.0 as f64; N];
@@ -35,15 +35,10 @@ fn test() {
         fx
     };
 
-    let m = monitor(|prgr| {
-        prgr.report();
-
-        false
-    });
-
+    /// 3. let's FIRE!
     fire()
         .with_max_step(0.20)
         .with_max_cycles(5000)
-        .minimize_alt(&mut x, evaluate, m);
+        .minimize(&mut x, evaluate);
 }
 // rosenbrock:1 ends here

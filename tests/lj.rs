@@ -53,16 +53,7 @@ fn test_fire_opt() {
 
     let lj = LennardJones::default();
 
-    // option 1: quick call
-    // fire()
-    //     .with_max_step(0.2)
-    //     .with_max_gradient_norm(0.4)
-    //     .minimize(&mut positions, |x, forces| {
-    //         let energy = lj.evaluate(x.as_3d(), forces.as_mut_3d());
-    //         energy
-    //     });
-
-    // option 2: alternative interface with user defined monitor
+    // alternative interface with user defined monitor
     fire()
         .with_max_step(0.2)
         .with_max_cycles(4000)

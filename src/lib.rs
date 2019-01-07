@@ -166,12 +166,11 @@ impl TerminationCriteria for Termination {
 // [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*minimizing%20interface][minimizing interface:1]]
 /// Common interfaces for structure relaxation
 pub trait GradientBasedMinimizer: Sized {
-    fn minimize<E, G>(mut self, x: &mut [f64], mut f: E)
+    fn minimize<E>(mut self, x: &mut [f64], mut f: E)
     where
         E: FnMut(&[f64], &mut [f64]) -> f64,
-        G: TerminationCriteria,
     {
-        self.minimize_alt::<E, G>(x, f, None)
+        self.minimize_alt::<E, _>(x, f, monitor(|_| false))
     }
 
     fn minimize_alt<E, G>(mut self, x: &mut [f64], mut f: E, mut stopping: Option<G>)
