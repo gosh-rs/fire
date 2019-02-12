@@ -1,6 +1,6 @@
 // header
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*header][header:1]]
+// [[file:~/Workspace/Programming/rust-libs/fire/fire.note::*header][header:1]]
 //! Line search, also called one-dimensional search, refers to an optimization
 //! procedure for univariable functions.
 //! 
@@ -50,7 +50,7 @@ use crate::common::*;
 
 // pub
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*pub][pub:1]]
+// [[file:~/Workspace/Programming/rust-libs/fire/fire.note::*pub][pub:1]]
 /// A unified interface to line search methods.
 ///
 /// # Examples
@@ -171,7 +171,7 @@ impl LineSearch {
 
 // algorithm
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*algorithm][algorithm:1]]
+// [[file:~/Workspace/Programming/rust-libs/fire/fire.note::*algorithm][algorithm:1]]
 /// Line search algorithms.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum LineSearchAlgorithm {
@@ -227,7 +227,7 @@ impl Default for LineSearchAlgorithm {
 
 // base
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*base][base:1]]
+// [[file:~/Workspace/Programming/rust-libs/fire/fire.note::*base][base:1]]
 #[derive(Clone, Debug, PartialEq)]
 pub enum LineSearchCondition {
     /// The sufficient decrease condition.
@@ -252,7 +252,7 @@ where
 
 // BackTracking
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*BackTracking][BackTracking:1]]
+// [[file:~/Workspace/Programming/rust-libs/fire/fire.note::*BackTracking][BackTracking:1]]
 #[derive(Clone, Debug)]
 struct BackTracking {
     /// A parameter to control the accuracy of the line search routine.
@@ -505,13 +505,13 @@ where
 // Jorge J. More', David J. Thuente
 
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*Original%20documentation%20by%20J.%20Nocera%20(lbfgs.f)][Original documentation by J. Nocera (lbfgs.f):1]]
+// [[file:~/Workspace/Programming/rust-libs/fire/fire.note::*Original%20documentation%20by%20J.%20Nocera%20(lbfgs.f)][Original documentation by J. Nocera (lbfgs.f):1]]
 
 // Original documentation by J. Nocera (lbfgs.f):1 ends here
 
 // entry
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*entry][entry:1]]
+// [[file:~/Workspace/Programming/rust-libs/fire/fire.note::*entry][entry:1]]
 use self::mcsrch::MoreThuente;
 
 /// The purpose of mcsrch is to find a step which satisfies a sufficient
@@ -769,7 +769,7 @@ satisfies the sufficient decrease and curvature conditions."
             }
 
             // Maximum number of iteration.
-            warn!("The line-search routine reaches the maximum number of evaluations.");
+            warn!("Line-search failed with the maximum number of evaluations.");
 
             Ok(0)
         }
@@ -779,7 +779,7 @@ satisfies the sufficient decrease and curvature conditions."
 
 // mcstep
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*mcstep][mcstep:1]]
+// [[file:~/Workspace/Programming/rust-libs/fire/fire.note::*mcstep][mcstep:1]]
 /// Represents the original MCSTEP subroutine by J. Nocera, which is a variant
 /// of More' and Thuente's routine.
 ///
@@ -994,7 +994,7 @@ mod mcstep {
 
 // interpolation
 
-// [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*interpolation][interpolation:1]]
+// [[file:~/Workspace/Programming/rust-libs/fire/fire.note::*interpolation][interpolation:1]]
 /// Find a minimizer of an interpolated cubic function.
 ///
 /// # Arguments
