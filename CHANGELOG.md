@@ -1,4 +1,10 @@
 
+# v0.0.6
+
+-   fixed \`minimize\` api issue
+-   fixed meaningless warning in line mod when no line search
+
+
 # <span class="timestamp-wrapper"><span class="timestamp">[2019-01-06 Sun] </span></span> v0.0.5
 
 -   added \`CachedProblem\` struct to cache function evaluations.

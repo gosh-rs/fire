@@ -377,7 +377,9 @@ where
             }
         }
 
-        warn!("max allowed line searches reached!");
+        if self.max_iterations > 1 {
+            warn!("max allowed line searches reached!");
+        }
 
         Ok(0)
     }
@@ -768,8 +770,9 @@ satisfies the sufficient decrease and curvature conditions."
                 }
             }
 
-            // Maximum number of iteration.
-            warn!("Line-search failed with the maximum number of evaluations.");
+            if self.max_iterations > 1 {
+                warn!("Line-search failed with the maximum number of evaluations.");
+            }
 
             Ok(0)
         }
