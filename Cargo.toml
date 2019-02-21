@@ -1,9 +1,9 @@
 # cargo
 
-# [[file:~/Workspace/Programming/rust-scratch/fire/fire.note::*cargo][cargo:1]]
+# [[file:~/Workspace/Programming/rust-libs/fire/fire.note::*cargo][cargo:1]]
 [package]
 name = "fire"
-version = "0.0.5"
+version = "0.0.6"
 edition = "2018"
 authors = ["Wenping Guo <ybyygu@gmail.com>"]
 
@@ -12,6 +12,7 @@ quicli = "0.4"
 vecfx = {git = "https://github.com/ybyygu/vecfx.git"}
 
 [dev-dependencies]
+pyo3 = "0.5"
 
 [features]
 default = []
