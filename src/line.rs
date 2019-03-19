@@ -792,12 +792,7 @@ satisfies the sufficient decrease and curvature conditions."
 /// Documentation is adopted from the original Fortran codes.
 mod mcstep {
     // dependencies
-    use super::{
-        cubic_minimizer,
-        cubic_minimizer2,
-        quard_minimizer,
-        quard_minimizer2,
-    };
+    use super::{cubic_minimizer, cubic_minimizer2, quard_minimizer, quard_minimizer2};
 
     use quicli::prelude::*;
     type Result<T> = ::std::result::Result<T, Error>;
@@ -1042,15 +1037,15 @@ fn cubic_minimizer(cm: &mut f64, u: f64, fu: f64, du: f64, v: f64, fv: f64, dv: 
 ///  * xmax:   The maximum value.
 #[inline]
 fn cubic_minimizer2(
-    cm   : &mut f64,
-    u    : f64,
-    fu   : f64,
-    du   : f64,
-    v    : f64,
-    fv   : f64,
-    dv   : f64,
-    xmin : f64,
-    xmax : f64,
+    cm: &mut f64,
+    u: f64,
+    fu: f64,
+    du: f64,
+    v: f64,
+    fv: f64,
+    dv: f64,
+    xmin: f64,
+    xmax: f64,
 ) {
     let d = v - u;
     let theta = (fu - fv) * 3.0 / d + du + dv;
